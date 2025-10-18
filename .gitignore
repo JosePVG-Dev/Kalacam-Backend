@@ -1,0 +1,21 @@
+# Entornos virtuales
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Archivos de entorno
+.env
+
+# Bases de datos locales
+*.sqlite3
+
+# Logs
+*.log
+
+# Carpeta de migraciones (si usas Alembic)
+migrations/
+
+# Carpeta de resultados o caches
+__pycache__/
+*.cache/
