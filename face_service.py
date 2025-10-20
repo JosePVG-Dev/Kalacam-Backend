@@ -111,7 +111,7 @@ def compararRostro(db: Session, contenido: bytes):
             mejor_usuario = usuario
 
     # 4️⃣ Evaluar similitud
-    UMBRAL_SIMILITUD = 0.35
+    UMBRAL_SIMILITUD = 0.41
     if mejor_usuario and menor_distancia < UMBRAL_SIMILITUD:
         return {
             "mensaje": "Rostro reconocido",
