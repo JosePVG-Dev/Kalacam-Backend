@@ -1,6 +1,5 @@
 FROM python:3.11-slim
 
-# Librerías del sistema necesarias para OpenCV / DeepFace
 RUN apt-get update && apt-get install -y \
     libgl1 \
     libglib2.0-0 \
@@ -12,7 +11,6 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 COPY . /app
 
-# Instalar dependencias de Python
 RUN pip install --upgrade pip && pip install -r requirements.txt
 
 ENV PORT 8000
