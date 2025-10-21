@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from models import Usuario  # importa tu modelo
+from models import Usuario  
 
 def crear_usuario(db: Session, usuario: Usuario) -> Usuario:
 
@@ -11,3 +11,4 @@ def crear_usuario(db: Session, usuario: Usuario) -> Usuario:
 def obtener_usuarios(db: Session) -> list[Usuario]:
 
     return db.query(Usuario).all()
+
