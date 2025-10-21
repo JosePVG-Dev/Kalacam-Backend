@@ -4,7 +4,7 @@ from database import SessionLocal
 import numpy as np
 from scipy.spatial.distance import cosine
 from database import Base, engine
-from models import Usuario
+from models import Usuario, Historial
 
 import face_service
 from historial_repository import crear_historial
@@ -46,14 +46,17 @@ async def subir_usuario(
 
     ip = request.client.host
     user_agent = request.headers.get("user-agent")
-    crear_historial(
-        db=db,
-        accion=f"Usuario {nombre} {apellido} creado",
-        metodo="POST",
-        endpoint="/subirUsuario",
-        ip=ip,
-        user_agent=user_agent
+    accion = f"Usuario {nombre} {apellido} creado"
+
+    historial = Historial(
+    accion=accion,
+    metodo="POST",
+    endpoint="/subirUsuario",
+    ip=ip,
+    user_agent=user_agent
     )
+
+    crear_historial(db=db, historial=historial)
 
     return {
         "mensaje": f"El usuario {nombre} {apellido}, ha sido creado exitosamente ",
@@ -85,13 +88,14 @@ async def comparar_cara(
     else:
         accion = "Intento fallido de acceso (rostro no reconocido)"
 
-    crear_historial(
-        db=db,
-        accion=accion,
-        metodo="POST",
-        endpoint="/compararCara",
-        ip=ip,
-        user_agent=user_agent
+  
+    historial = Historial(
+    accion=accion,
+    metodo="POST",
+    endpoint="/compararCara",
+    ip=ip,
+    user_agent=user_agent
     )
 
+    crear_historial(db=db, historial=historial)
     return resultado
