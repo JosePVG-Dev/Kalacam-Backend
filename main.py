@@ -26,12 +26,25 @@ def get_db():
 async def subir_usuario(
     nombre: str = Form(...),
     apellido: str = Form(...),
+    email: str = Form(...),
     imagen: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
     """
     Sube una imagen, valida el rostro, genera embedding y crea un usuario en la DB.
+
+    Parámetros:
+        nombre (str): Nombre del usuario.
+        apellido (str): Apellido del usuario.
+        email (str): Correo electrónico del usuario.
+        imagen (UploadFile): Imagen facial (JPEG o PNG).
+        db (Session): Sesión activa de SQLAlchemy.
+
+    Retorna:
+        dict: Datos del usuario creado y longitud del embedding.
     """
+
+    # Validar tipo de imagen
     if imagen.content_type not in ["image/jpeg", "image/png"]:
         raise HTTPException(status_code=400, detail="Tipo de archivo no permitido")
 
@@ -39,15 +52,16 @@ async def subir_usuario(
     contenido = await imagen.read()
     embedding = face_service.validarRostro(contenido)
 
-    # Crear usuario
-    usuario_guardado = face_service.crearUsuario(db, nombre, apellido, embedding)
+    # Crear usuario (ahora con email)
+    usuario_guardado = face_service.crearUsuario(db, nombre, apellido, email, embedding)
 
     return {
         "mensaje": "Usuario creado correctamente",
         "usuario": {
             "id": usuario_guardado.id,
             "nombre": usuario_guardado.nombre,
-            "apellido": usuario_guardado.apellido
+            "apellido": usuario_guardado.apellido,
+            "email": usuario_guardado.email
         },
         "embedding_length": len(embedding)
     }
