@@ -7,5 +7,5 @@ class Usuario(Base):
     id = Column(Integer, primary_key=True, index=True)
     nombre = Column(String(100), nullable=False)
     apellido = Column(String(100), nullable=False)
-    embedding = Column(JSON, nullable=False)  # asegurarse de importar JSON
-
+    email = Column(String(255), unique=True, nullable=True)
+    embedding = Column(JSON, nullable=False) 

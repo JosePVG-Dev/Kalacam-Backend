@@ -48,7 +48,15 @@ def validarRostro(contenido: bytes) -> List[float]:
         raise HTTPException(status_code=500, detail=f"Error procesando la imagen: {str(e)}")
 
 
-def crearUsuario(db: Session, nombre: str, apellido: str, embedding: List[float]) -> Usuario:
+from fastapi import HTTPException
+from sqlalchemy.orm import Session
+from typing import List
+from models import Usuario
+from face_repository import crear_usuario
+import re  # para validar formato de email
+
+
+def crearUsuario(db: Session, nombre: str, apellido: str, email: str, embedding: List[float]) -> Usuario:
     """
     Crea un usuario en la base de datos después de validar sus datos.
 
@@ -56,28 +64,44 @@ def crearUsuario(db: Session, nombre: str, apellido: str, embedding: List[float]
         db (Session): Sesión activa de SQLAlchemy para interactuar con la base de datos.
         nombre (str): Nombre del usuario. No puede estar vacío ni superar 100 caracteres.
         apellido (str): Apellido del usuario. No puede estar vacío ni superar 100 caracteres.
+        email (str): Correo electrónico del usuario. Debe tener un formato válido y no estar vacío.
         embedding (List[float]): Embedding facial generado previamente.
 
     Retorna:
         Usuario: Objeto Usuario creado y guardado en la base de datos con su ID asignado.
 
     Excepciones:
-        HTTPException 400: Si algún campo es inválido (nombre/apellido vacío, embedding incorrecto).
+        HTTPException 400: Si algún campo es inválido.
     """
+
+    # --- Validaciones básicas ---
     if not nombre or not nombre.strip():
         raise HTTPException(status_code=400, detail="El nombre no puede estar vacío")
     if not apellido or not apellido.strip():
         raise HTTPException(status_code=400, detail="El apellido no puede estar vacío")
     if len(nombre) > 100 or len(apellido) > 100:
         raise HTTPException(status_code=400, detail="El nombre o apellido es demasiado largo")
+
+    # --- Validación del email ---
+    if not email or not email.strip():
+        raise HTTPException(status_code=400, detail="El email no puede estar vacío")
+    
+    # Patrón simple para validar formato de correo
+    patron_email = r"^[\w\.-]+@[\w\.-]+\.\w+$"
+    if not re.match(patron_email, email):
+        raise HTTPException(status_code=400, detail="El email no tiene un formato válido")
+
+    # --- Validación del embedding ---
     if not embedding or not isinstance(embedding, list) or not all(isinstance(x, (float, int)) for x in embedding):
         raise HTTPException(status_code=400, detail="Embedding inválido")
 
     nuevo_usuario = Usuario(
         nombre=nombre.strip(),
         apellido=apellido.strip(),
+        email=email.strip().lower(),
         embedding=embedding
     )
+
     usuario_guardado = crear_usuario(db, nuevo_usuario)
     return usuario_guardado
 
