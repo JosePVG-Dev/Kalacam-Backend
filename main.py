@@ -1,4 +1,4 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, Form
+from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, Form, Request
 from sqlalchemy.orm import Session
 from database import SessionLocal
 import numpy as np
@@ -7,7 +7,7 @@ from database import Base, engine
 from models import Usuario
 
 import face_service
-from face_repository import obtener_usuarios
+from historial_repository import crear_historial
 
 Base.metadata.create_all(bind=engine)
 
@@ -22,8 +22,10 @@ def get_db():
         db.close()
 
 
+
 @app.post("/subirUsuario")
 async def subir_usuario(
+    request: Request,
     nombre: str = Form(...),
     apellido: str = Form(...),
     email: str = Form(...),
@@ -32,50 +34,64 @@ async def subir_usuario(
 ):
     """
     Sube una imagen, valida el rostro, genera embedding y crea un usuario en la DB.
-
-    Parámetros:
-        nombre (str): Nombre del usuario.
-        apellido (str): Apellido del usuario.
-        email (str): Correo electrónico del usuario.
-        imagen (UploadFile): Imagen facial (JPEG o PNG).
-        db (Session): Sesión activa de SQLAlchemy.
-
-    Retorna:
-        dict: Datos del usuario creado y longitud del embedding.
+    Además, registra la acción en la tabla de historial.
     """
-
-    # Validar tipo de imagen
     if imagen.content_type not in ["image/jpeg", "image/png"]:
         raise HTTPException(status_code=400, detail="Tipo de archivo no permitido")
 
-    # Leer la imagen y obtener embedding
     contenido = await imagen.read()
     embedding = face_service.validarRostro(contenido)
 
-    # Crear usuario (ahora con email)
     usuario_guardado = face_service.crearUsuario(db, nombre, apellido, email, embedding)
 
+    ip = request.client.host
+    user_agent = request.headers.get("user-agent")
+    crear_historial(
+        db=db,
+        accion=f"Usuario {nombre} {apellido} creado",
+        metodo="POST",
+        endpoint="/subirUsuario",
+        ip=ip,
+        user_agent=user_agent
+    )
+
     return {
-        "mensaje": "Usuario creado correctamente",
-        "usuario": {
-            "id": usuario_guardado.id,
-            "nombre": usuario_guardado.nombre,
-            "apellido": usuario_guardado.apellido,
-            "email": usuario_guardado.email
-        },
-        "embedding_length": len(embedding)
+        "mensaje": f"El usuario {nombre} {apellido}, ha sido creado exitosamente ",
     }
 
 
 @app.post("/compararCara")
-async def comparar_cara(imagen: UploadFile = File(...), db: Session = Depends(get_db)):
+async def comparar_cara(
+    request: Request,
+    imagen: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
     """
     Compara una imagen con todos los usuarios guardados en la base de datos.
-    Retorna el usuario más similar según la distancia coseno.
+    Registra el intento en la tabla de historial.
     """
     if imagen.content_type not in ["image/jpeg", "image/png"]:
         raise HTTPException(status_code=400, detail="Tipo de archivo no permitido")
 
     contenido = await imagen.read()
     resultado = face_service.compararRostro(db, contenido)
+
+    ip = request.client.host
+    user_agent = request.headers.get("user-agent")
+
+    mensaje = resultado.get("mensaje", "")
+    if mensaje.startswith("Bienvenido"):
+        accion = f"{mensaje} (acceso concedido)"
+    else:
+        accion = "Intento fallido de acceso (rostro no reconocido)"
+
+    crear_historial(
+        db=db,
+        accion=accion,
+        metodo="POST",
+        endpoint="/compararCara",
+        ip=ip,
+        user_agent=user_agent
+    )
+
     return resultado

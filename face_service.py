@@ -53,7 +53,7 @@ from sqlalchemy.orm import Session
 from typing import List
 from models import Usuario
 from face_repository import crear_usuario
-import re  # para validar formato de email
+import re  
 
 
 def crearUsuario(db: Session, nombre: str, apellido: str, email: str, embedding: List[float]) -> Usuario:
@@ -74,7 +74,6 @@ def crearUsuario(db: Session, nombre: str, apellido: str, email: str, embedding:
         HTTPException 400: Si algún campo es inválido.
     """
 
-    # --- Validaciones básicas ---
     if not nombre or not nombre.strip():
         raise HTTPException(status_code=400, detail="El nombre no puede estar vacío")
     if not apellido or not apellido.strip():
@@ -82,16 +81,13 @@ def crearUsuario(db: Session, nombre: str, apellido: str, email: str, embedding:
     if len(nombre) > 100 or len(apellido) > 100:
         raise HTTPException(status_code=400, detail="El nombre o apellido es demasiado largo")
 
-    # --- Validación del email ---
     if not email or not email.strip():
         raise HTTPException(status_code=400, detail="El email no puede estar vacío")
     
-    # Patrón simple para validar formato de correo
     patron_email = r"^[\w\.-]+@[\w\.-]+\.\w+$"
     if not re.match(patron_email, email):
         raise HTTPException(status_code=400, detail="El email no tiene un formato válido")
 
-    # --- Validación del embedding ---
     if not embedding or not isinstance(embedding, list) or not all(isinstance(x, (float, int)) for x in embedding):
         raise HTTPException(status_code=400, detail="Embedding inválido")
 
@@ -109,12 +105,10 @@ def crearUsuario(db: Session, nombre: str, apellido: str, email: str, embedding:
 def compararRostro(db: Session, contenido: bytes):
     """
     Compara un rostro con los embeddings almacenados en la base de datos.
-    Devuelve el usuario más parecido y la distancia coseno.
+    Devuelve un mensaje indicando si el rostro fue reconocido o no.
     """
-    # 1️⃣ Generar embedding del rostro recibido
     embedding_consulta = np.array(validarRostro(contenido))
 
-    # 2️⃣ Obtener usuarios de la base de datos
     usuarios = obtener_usuarios(db)
     if not usuarios:
         raise HTTPException(status_code=404, detail="No hay usuarios registrados")
@@ -122,7 +116,9 @@ def compararRostro(db: Session, contenido: bytes):
     mejor_usuario = None
     menor_distancia = float("inf")
 
-    # 3️⃣ Comparar con cada usuario
+    # Definir umbral fuera del bucle
+    UMBRAL_SIMILITUD = 0.40
+
     for usuario in usuarios:
         if not usuario.embedding:
             continue
@@ -134,20 +130,13 @@ def compararRostro(db: Session, contenido: bytes):
             menor_distancia = distancia
             mejor_usuario = usuario
 
-    # 4️⃣ Evaluar similitud
-    UMBRAL_SIMILITUD = 0.40
     if mejor_usuario and menor_distancia < UMBRAL_SIMILITUD:
         return {
-            "mensaje": "Rostro reconocido",
-            "usuario": {
-                "id": mejor_usuario.id,
-                "nombre": mejor_usuario.nombre,
-                "apellido": mejor_usuario.apellido
-            },
+            "mensaje": f"Bienvenido {mejor_usuario.nombre} {mejor_usuario.apellido} 🎉",
             "distancia": float(menor_distancia)
         }
     else:
         return {
-            "mensaje": "No se encontró un rostro coincidente",
+            "mensaje": "No tienes acceso 🚫",
             "distancia_menor": float(menor_distancia)
         }
