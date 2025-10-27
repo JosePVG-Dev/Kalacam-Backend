@@ -7,11 +7,10 @@ import os
 
 load_dotenv()
 
-# Variables del Pooler (no del connection string directo)
 USER = os.getenv("DB_USER")
 PASSWORD = os.getenv("DB_PASSWORD")
-HOST = os.getenv("DB_HOST")  # Este debería terminar en `pooler.supabase.com`
-PORT = os.getenv("DB_PORT", 6543)  # 6543 es el puerto del transaction pooler
+HOST = os.getenv("DB_HOST")  
+PORT = os.getenv("DB_PORT")  
 DBNAME = os.getenv("DB_NAME")
 
 DATABASE_URL = f"mysql+pymysql://{USER}:{PASSWORD}@{HOST}:{PORT}/{DBNAME}"

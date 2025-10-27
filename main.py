@@ -1,19 +1,36 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, Form, Request
+from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, Form, Request, Header
 from sqlalchemy.orm import Session
-from database import SessionLocal
+from database.database import SessionLocal
 import numpy as np
 from scipy.spatial.distance import cosine
-from database import Base, engine
-from models import Usuario, Historial
+from database.database import Base, engine
+from model.models import Usuario, Historial, TokenRequest
+from middleware.historial_middleware import HistorialMiddleware
+from middleware.auth_middleware import AuthMiddleware
+import service.face_service as face_service
+from repository.historial_repository import crear_historial, obtener_historial
+from service.token_service import validar_token, generar_token
+from repository.usuario_repository import obtener_usuarios, obtener_usuario, actualizar_usuario, eliminar_usuario
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import Depends, HTTPException
 
-import face_service
-from historial_repository import crear_historial
-
+# -------------------- CONFIG --------------------
 Base.metadata.create_all(bind=engine)
-
 app = FastAPI()
 
-# Dependencia para obtener la sesión de la base de datos
+# Middlewares
+app.add_middleware(AuthMiddleware)
+app.add_middleware(HistorialMiddleware)
+
+# Security
+bearer_scheme = HTTPBearer()
+
+def auth_required(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)):
+    token = credentials.credentials
+    if not validar_token(token):
+        raise HTTPException(status_code=401, detail="Token inválido")
+
+# -------------------- DEPENDENCIA DB --------------------
 def get_db():
     db = SessionLocal()
     try:
@@ -21,7 +38,7 @@ def get_db():
     finally:
         db.close()
 
-
+# -------------------- ENDPOINTS --------------------
 
 @app.post("/subirUsuario")
 async def subir_usuario(
@@ -32,70 +49,93 @@ async def subir_usuario(
     imagen: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
-    """
-    Sube una imagen, valida el rostro, genera embedding y crea un usuario en la DB.
-    Además, registra la acción en la tabla de historial.
-    """
     if imagen.content_type not in ["image/jpeg", "image/png"]:
         raise HTTPException(status_code=400, detail="Tipo de archivo no permitido")
 
     contenido = await imagen.read()
     embedding = face_service.validarRostro(contenido)
-
     usuario_guardado = face_service.crearUsuario(db, nombre, apellido, email, embedding)
 
-    ip = request.client.host
-    user_agent = request.headers.get("user-agent")
-    accion = f"Usuario {nombre} {apellido} creado"
-
-    historial = Historial(
-    accion=accion,
-    metodo="POST",
-    endpoint="/subirUsuario",
-    ip=ip,
-    user_agent=user_agent
-    )
-
-    crear_historial(db=db, historial=historial)
-
     return {
-        "mensaje": f"El usuario {nombre} {apellido}, ha sido creado exitosamente ",
+        "mensaje": f"El usuario {nombre} {apellido}, ha sido creado exitosamente",
     }
 
+# -------------------- USUARIOS PROTEGIDOS --------------------
 
+@app.get("/usuarios")
+def listar_usuarios(
+    db: Session = Depends(get_db),
+    auth: None = Depends(auth_required)
+):
+    return obtener_usuarios(db)
+
+@app.get("/usuarios/{usuario_id}")
+def get_usuario(
+    usuario_id: int,
+    db: Session = Depends(get_db),
+    auth: None = Depends(auth_required)
+):
+    usuario = obtener_usuario(db, usuario_id)
+    if not usuario:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    return usuario
+
+@app.put("/usuarios/{usuario_id}")
+def update_usuario(
+    usuario_id: int,
+    nombre: str | None = None,
+    apellido: str | None = None,
+    email: str | None = None,
+    db: Session = Depends(get_db),
+    auth: None = Depends(auth_required)
+):
+    datos = {k: v for k, v in {"nombre": nombre, "apellido": apellido, "email": email}.items() if v is not None}
+    usuario_actualizado = actualizar_usuario(db, usuario_id, datos)
+    if not usuario_actualizado:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    return usuario_actualizado
+
+@app.delete("/usuarios/{usuario_id}")
+def delete_usuario(
+    usuario_id: int,
+    db: Session = Depends(get_db),
+    auth: None = Depends(auth_required)
+):
+    if eliminar_usuario(db, usuario_id):
+        return {"mensaje": "Usuario eliminado correctamente"}
+    else:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+# -------------------- COMPARAR CARA (PÚBLICO) --------------------
 @app.post("/compararCara")
 async def comparar_cara(
-    request: Request,
     imagen: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
-    """
-    Compara una imagen con todos los usuarios guardados en la base de datos.
-    Registra el intento en la tabla de historial.
-    """
     if imagen.content_type not in ["image/jpeg", "image/png"]:
         raise HTTPException(status_code=400, detail="Tipo de archivo no permitido")
 
     contenido = await imagen.read()
-    resultado = face_service.compararRostro(db, contenido)
+    reconocido = face_service.compararRostro(db, contenido)
 
-    ip = request.client.host
-    user_agent = request.headers.get("user-agent")
-
-    mensaje = resultado.get("mensaje", "")
-    if mensaje.startswith("Bienvenido"):
-        accion = f"{mensaje} (acceso concedido)"
+    if reconocido:
+        token = generar_token()
+        return {"token": token}
     else:
-        accion = "Intento fallido de acceso (rostro no reconocido)"
+        raise HTTPException(status_code=401, detail="Rostro no reconocido")
 
-  
-    historial = Historial(
-    accion=accion,
-    metodo="POST",
-    endpoint="/compararCara",
-    ip=ip,
-    user_agent=user_agent
-    )
+# -------------------- HISTORIAL PROTEGIDO --------------------
+@app.get("/historial")
+def listar_historial(
+    db: Session = Depends(get_db),
+    auth: None = Depends(auth_required)
+):
+    return obtener_historial(db)
 
-    crear_historial(db=db, historial=historial)
-    return resultado
+# -------------------- LOGIN PÚBLICO --------------------
+@app.post("/login")
+def validar_token_endpoint(request: TokenRequest):
+    if validar_token(request.token):
+        return {"ok": True, "mensaje": "Token válido, acceso permitido"}
+    else:
+        raise HTTPException(status_code=401, detail="Token inválido")

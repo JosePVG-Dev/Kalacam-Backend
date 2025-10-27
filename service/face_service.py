@@ -6,8 +6,8 @@ from fastapi import HTTPException
 from scipy.spatial.distance import cosine
 from typing import List
 from sqlalchemy.orm import Session
-from models import Usuario
-from face_repository import crear_usuario, obtener_usuarios
+from model.models import Usuario
+from repository.usuario_repository import crear_usuario, obtener_usuarios
 
 
 def validarRostro(contenido: bytes) -> List[float]:
@@ -51,8 +51,8 @@ def validarRostro(contenido: bytes) -> List[float]:
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from typing import List
-from models import Usuario
-from face_repository import crear_usuario
+from model.models import Usuario
+from repository.usuario_repository import crear_usuario
 import re  
 
 
@@ -102,41 +102,26 @@ def crearUsuario(db: Session, nombre: str, apellido: str, email: str, embedding:
     return usuario_guardado
 
 
-def compararRostro(db: Session, contenido: bytes):
+def compararRostro(db: Session, contenido: bytes) -> bool:
     """
     Compara un rostro con los embeddings almacenados en la base de datos.
-    Devuelve un mensaje indicando si el rostro fue reconocido o no.
+    Devuelve True si el rostro fue reconocido, False si no.
     """
     embedding_consulta = np.array(validarRostro(contenido))
-
     usuarios = obtener_usuarios(db)
     if not usuarios:
         raise HTTPException(status_code=404, detail="No hay usuarios registrados")
 
-    mejor_usuario = None
     menor_distancia = float("inf")
 
-    # Definir umbral fuera del bucle
     UMBRAL_SIMILITUD = 0.40
 
     for usuario in usuarios:
         if not usuario.embedding:
             continue
-
         emb_db = np.array(usuario.embedding, dtype=float)
         distancia = cosine(embedding_consulta, emb_db)
-
         if distancia < menor_distancia:
             menor_distancia = distancia
-            mejor_usuario = usuario
 
-    if mejor_usuario and menor_distancia < UMBRAL_SIMILITUD:
-        return {
-            "mensaje": f"Bienvenido {mejor_usuario.nombre} {mejor_usuario.apellido} 🎉",
-            "distancia": float(menor_distancia)
-        }
-    else:
-        return {
-            "mensaje": "No tienes acceso 🚫",
-            "distancia_menor": float(menor_distancia)
-        }
+    return menor_distancia < UMBRAL_SIMILITUD

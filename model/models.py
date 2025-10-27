@@ -1,6 +1,7 @@
 from sqlalchemy import Column, Integer, String, JSON, DateTime
-from database import Base
+from database.database import Base
 from datetime import datetime
+from pydantic import BaseModel
 
 
 class Usuario(Base):
@@ -23,3 +24,6 @@ class Historial(Base):
     ip = Column(String(100))
     user_agent = Column(String(255))
     fecha = Column(DateTime, default=datetime.now)
+
+class TokenRequest(BaseModel):
+    token: str
