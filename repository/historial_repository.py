@@ -1,6 +1,6 @@
 
 from sqlalchemy.orm import Session
-from models import Historial
+from model.models import Historial
 def crear_historial(db: Session, historial: Historial) -> Historial:
 
     db.add(historial)
