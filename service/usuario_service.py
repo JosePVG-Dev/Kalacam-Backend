@@ -4,10 +4,11 @@ from io import BytesIO
 import numpy as np
 from fastapi import HTTPException
 from scipy.spatial.distance import cosine
-from typing import List
+from typing import List, Optional
 from sqlalchemy.orm import Session
 from model.models import Usuario
 from repository.usuario_repository import crear_usuario, obtener_usuarios
+import re
 
 
 def validarRostro(contenido: bytes) -> List[float]:
@@ -47,13 +48,6 @@ def validarRostro(contenido: bytes) -> List[float]:
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error procesando la imagen: {str(e)}")
 
-
-from fastapi import HTTPException
-from sqlalchemy.orm import Session
-from typing import List
-from model.models import Usuario
-from repository.usuario_repository import crear_usuario
-import re  
 
 
 def crearUsuario(db: Session, nombre: str, apellido: str, email: str, embedding: List[float]) -> Usuario:
@@ -102,10 +96,10 @@ def crearUsuario(db: Session, nombre: str, apellido: str, email: str, embedding:
     return usuario_guardado
 
 
-def compararRostro(db: Session, contenido: bytes) -> bool:
+def compararRostro(db: Session, contenido: bytes) -> Optional[str]:
     """
     Compara un rostro con los embeddings almacenados en la base de datos.
-    Devuelve True si el rostro fue reconocido, False si no.
+    Devuelve el nombre del usuario si el rostro fue reconocido, None si no.
     """
     embedding_consulta = np.array(validarRostro(contenido))
     usuarios = obtener_usuarios(db)
@@ -113,6 +107,7 @@ def compararRostro(db: Session, contenido: bytes) -> bool:
         raise HTTPException(status_code=404, detail="No hay usuarios registrados")
 
     menor_distancia = float("inf")
+    usuario_reconocido = None
 
     UMBRAL_SIMILITUD = 0.40
 
@@ -123,5 +118,9 @@ def compararRostro(db: Session, contenido: bytes) -> bool:
         distancia = cosine(embedding_consulta, emb_db)
         if distancia < menor_distancia:
             menor_distancia = distancia
+            usuario_reconocido = usuario
 
-    return menor_distancia < UMBRAL_SIMILITUD
+    if menor_distancia < UMBRAL_SIMILITUD and usuario_reconocido:
+        return usuario_reconocido.nombre
+    
+    return None

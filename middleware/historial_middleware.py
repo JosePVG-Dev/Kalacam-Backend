@@ -23,7 +23,7 @@ class HistorialMiddleware:
                     if endpoint == "/subirUsuario":
                         accion = "Creación de usuario"
                     elif endpoint == "/compararCara":
-                        accion = "Intento de acceso vía rostro"
+                        accion = "Intento de acceso via rostro"
                     elif endpoint.startswith("/usuarios") and metodo == "GET":
                         accion = "Consulta de usuario(s)"
                     elif endpoint.startswith("/usuarios") and metodo == "PUT":

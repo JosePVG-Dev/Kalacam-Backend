@@ -7,7 +7,7 @@ from database.database import Base, engine
 from model.models import Usuario, Historial, TokenRequest
 from middleware.historial_middleware import HistorialMiddleware
 from middleware.auth_middleware import AuthMiddleware
-import service.face_service as face_service
+import service.usuario_service as face_service
 from repository.historial_repository import crear_historial, obtener_historial
 from service.token_service import validar_token, generar_token
 from repository.usuario_repository import obtener_usuarios, obtener_usuario, actualizar_usuario, eliminar_usuario
@@ -116,11 +116,11 @@ async def comparar_cara(
         raise HTTPException(status_code=400, detail="Tipo de archivo no permitido")
 
     contenido = await imagen.read()
-    reconocido = face_service.compararRostro(db, contenido)
+    nombre_usuario = face_service.compararRostro(db, contenido)
 
-    if reconocido:
+    if nombre_usuario:
         token = generar_token()
-        return {"token": token}
+        return {"token": f"Hola {nombre_usuario}, token: {token}"}
     else:
         raise HTTPException(status_code=401, detail="Rostro no reconocido")
 
