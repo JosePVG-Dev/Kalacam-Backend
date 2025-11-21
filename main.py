@@ -32,7 +32,6 @@ app.add_middleware(
 )
 
 # Middlewares
-app.add_middleware(AuthMiddleware)
 app.add_middleware(HistorialMiddleware)
 
 # Security
