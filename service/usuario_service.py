@@ -109,7 +109,7 @@ def compararRostro(db: Session, contenido: bytes) -> Optional[str]:
     menor_distancia = float("inf")
     usuario_reconocido = None
 
-    UMBRAL_SIMILITUD = 0.40
+    UMBRAL_SIMILITUD = 0.37
 
     for usuario in usuarios:
         if not usuario.embedding:
