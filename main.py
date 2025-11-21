@@ -13,10 +13,23 @@ from service.token_service import validar_token, generar_token
 from repository.usuario_repository import obtener_usuarios, obtener_usuario, actualizar_usuario, eliminar_usuario
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi import Depends, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+
 
 # -------------------- CONFIG --------------------
 Base.metadata.create_all(bind=engine)
 app = FastAPI()
+origins = [
+    "http://localhost:3000",  # tu frontend
+    "http://127.0.0.1:3000",
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],  # <- importante, acepta PUT y OPTIONS
+    allow_headers=["*"],  # <- importante, acepta Authorization, Content-Type, etc.
+)
 
 # Middlewares
 app.add_middleware(AuthMiddleware)
