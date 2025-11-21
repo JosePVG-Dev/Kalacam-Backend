@@ -33,17 +33,17 @@ def validarRostro(contenido: bytes) -> List[float]:
         resultado = DeepFace.represent(img_path=np.array(img), model_name="Facenet")
 
         if not resultado or "embedding" not in resultado[0]:
-            raise HTTPException(status_code=400, detail="No se detectó ningún rostro")
+            raise HTTPException(status_code=400, detail="No se detecto ningun rostro")
 
         embedding = resultado[0]["embedding"]
 
         if len(embedding) == 0:
-            raise HTTPException(status_code=400, detail="Rostro inválido o embedding vacío")
+            raise HTTPException(status_code=400, detail="Rostro invalido o embedding vacio")
         
         return embedding
 
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=f"No se detectó ningún rostro")
+        raise HTTPException(status_code=400, detail=f"No se detecto ningun rostro")
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error procesando la imagen")
