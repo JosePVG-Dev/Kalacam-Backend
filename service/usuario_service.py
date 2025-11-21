@@ -43,10 +43,10 @@ def validarRostro(contenido: bytes) -> List[float]:
         return embedding
 
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=f"No se detectó ningún rostro: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"No se detectó ningún rostro")
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error procesando la imagen: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error procesando la imagen")
 
 
 
