@@ -76,16 +76,14 @@ async def subir_usuario(
 
 @app.get("/usuarios")
 def listar_usuarios(
-    db: Session = Depends(get_db),
-    auth: None = Depends(auth_required)
+    db: Session = Depends(get_db)
 ):
     return obtener_usuarios(db)
 
 @app.get("/usuarios/{usuario_id}")
 def get_usuario(
     usuario_id: int,
-    db: Session = Depends(get_db),
-    auth: None = Depends(auth_required)
+    db: Session = Depends(get_db)
 ):
     usuario = obtener_usuario(db, usuario_id)
     if not usuario:
@@ -98,8 +96,8 @@ def update_usuario(
     nombre: str | None = None,
     apellido: str | None = None,
     email: str | None = None,
-    db: Session = Depends(get_db),
-    auth: None = Depends(auth_required)
+    db: Session = Depends(get_db)
+
 ):
     datos = {k: v for k, v in {"nombre": nombre, "apellido": apellido, "email": email}.items() if v is not None}
     usuario_actualizado = actualizar_usuario(db, usuario_id, datos)
@@ -111,7 +109,7 @@ def update_usuario(
 def delete_usuario(
     usuario_id: int,
     db: Session = Depends(get_db),
-    auth: None = Depends(auth_required)
+
 ):
     if eliminar_usuario(db, usuario_id):
         return {"mensaje": "Usuario eliminado correctamente"}
@@ -139,8 +137,8 @@ async def comparar_cara(
 # -------------------- HISTORIAL PROTEGIDO --------------------
 @app.get("/historial")
 def listar_historial(
-    db: Session = Depends(get_db),
-    auth: None = Depends(auth_required)
+    db: Session = Depends(get_db)
+
 ):
     return obtener_historial(db)
 
