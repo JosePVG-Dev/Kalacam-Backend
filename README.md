@@ -35,7 +35,7 @@ API REST desarrollada con FastAPI para gestión de usuarios mediante reconocimie
 ### 1. Clonar el repositorio
 
 ```bash
-git clone <url-del-repositorio>
+git clone https://github.com/JoseVG-Dev/Kalacam-Backend
 cd Iot-Backend
 ```
 
@@ -78,19 +78,21 @@ DB_USER=tu_usuario
 DB_PASSWORD=tu_contraseña
 DB_HOST=localhost
 DB_PORT=3306
-DB_NAME=nombre_base_datos
+DB_NAME=iot_backend
 
-# Almacenamiento (opcional, por defecto usa "uploads")
+# Almacenamiento local (opcional, por defecto usa "uploads")
 VOLUMEN_PATH=uploads
 ```
 
 ### 6. Crear la base de datos
 
-Asegúrate de que la base de datos MySQL existe:
+Conecta a MySQL y crea la base de datos:
 
 ```sql
-CREATE DATABASE nombre_base_datos;
+CREATE DATABASE iot_backend CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
+
+Las tablas se crearán automáticamente al iniciar la aplicación gracias a SQLAlchemy.
 
 ### 7. Ejecutar la aplicación
 
@@ -246,12 +248,11 @@ Railway detectará automáticamente el `Dockerfile` y construirá la aplicación
   - JWT (JSON Web Tokens) con firma criptográfica
   - Base de datos con tabla de sesiones
 
-- **CORS:** Configurado para permitir solo orígenes específicos. Actualiza la lista en `main.py`:
+- **CORS:** Configurado para permitir solo orígenes específicos en `main.py`:
   ```python
   origins = [
       "http://localhost:3000",
       "http://127.0.0.1:3000",
-      # Agrega aquí tu dominio de producción
   ]
   ```
 
@@ -279,9 +280,9 @@ El sistema valida que no se registren rostros duplicados utilizando:
 source venv/bin/activate
 ```
 
-### Instalar nuevas dependencias
+### Agregar nuevas dependencias
 ```bash
-pip install <paquete>
+pip install nombre_paquete
 pip freeze > requirements.txt
 ```
 
@@ -309,13 +310,8 @@ Las contribuciones son bienvenidas. Por favor:
 
 Este proyecto es de código abierto y está disponible bajo la licencia MIT.
 
-## 👥 Autores
-
-- Tu Nombre - Desarrollo inicial
-
 ## 🐛 Reportar Issues
 
-Si encuentras algún bug o tienes sugerencias, por favor abre un [issue](link-al-repo/issues).
 
 ---
 
