@@ -7,6 +7,9 @@ __pycache__/
 # Archivos de entorno
 .env
 
+# Archivos subidos por usuarios (imágenes)
+uploads/
+
 # Bases de datos locales
 *.sqlite3
 

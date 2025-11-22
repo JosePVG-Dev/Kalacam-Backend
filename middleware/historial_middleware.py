@@ -1,14 +1,42 @@
+# Imports de terceros
 from fastapi import Request
 from starlette.types import ASGIApp, Receive, Scope, Send
+
+# Imports locales
 from database.database import SessionLocal
 from model.models import Historial
 from repository.historial_repository import crear_historial
 
+
 class HistorialMiddleware:
+    """
+    Middleware para registrar todas las peticiones HTTP en el historial.
+    
+    Captura información de cada petición (método, endpoint, IP, user agent)
+    y crea un registro en la base de datos con una descripción de la acción.
+    
+    Attributes:
+        app: Aplicación ASGI a la que se aplica el middleware.
+    """
+    
     def __init__(self, app: ASGIApp):
+        """
+        Inicializa el middleware de historial.
+        
+        Args:
+            app: Aplicación ASGI.
+        """
         self.app = app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send):
+        """
+        Procesa las peticiones HTTP y registra la acción en el historial.
+        
+        Args:
+            scope: Información de la petición.
+            receive: Canal de recepción de mensajes.
+            send: Canal de envío de mensajes.
+        """
         if scope["type"] == "http":
             request = Request(scope, receive=receive)
             ip = request.client.host
@@ -19,7 +47,16 @@ class HistorialMiddleware:
             db = SessionLocal()
 
             async def send_wrapper(message):
+                """
+                Wrapper para interceptar el inicio de la respuesta HTTP.
+                
+                Registra la acción en el historial antes de enviar la respuesta.
+                
+                Args:
+                    message: Mensaje ASGI a enviar.
+                """
                 if message["type"] == "http.response.start":
+                    # Determinar la acción según el endpoint y método
                     if endpoint == "/subirUsuario":
                         accion = "Creación de usuario"
                     elif endpoint == "/compararCara":
