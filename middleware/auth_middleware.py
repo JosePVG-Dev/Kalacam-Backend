@@ -8,14 +8,10 @@ from service.token_service import tokens_validos
 
 class AuthMiddleware:
     """
-    Middleware para validar autenticación con tokens en todas las rutas.
-    
-    Verifica que las peticiones a endpoints protegidos incluyan un token
-    válido en el header Authorization. Los endpoints públicos definidos
-    en la lista son accesibles sin autenticación.
+    Middleware para validar autenticación con tokens.
     
     Attributes:
-        app: Aplicación ASGI a la que se aplica el middleware.
+        app: Aplicación ASGI.
     """
     
     def __init__(self, app: ASGIApp):
@@ -42,19 +38,17 @@ class AuthMiddleware:
         if scope["type"] == "http":
             request = Request(scope, receive=receive)
             path = scope["path"]
-
-            # Endpoints que no requieren autenticación
             endpoints_publicos = ["/subirUsuario", "/login", "/docs", "/openapi.json", "/compararCara"]
 
             if path not in endpoints_publicos:
                 auth_header = request.headers.get("Authorization")
                 if not auth_header or not auth_header.startswith("Bearer "):
-                    raise HTTPException(status_code=401, detail="Authorization header faltante o inválido")
+                    raise HTTPException(status_code=401, detail="Sin auth")
 
                 token = auth_header.split(" ")[1]
 
                 if token not in tokens_validos:
-                    raise HTTPException(status_code=401, detail="Token inválido")
+                    raise HTTPException(status_code=401, detail="Token invalido")
 
             await self.app(scope, receive, send)
         else:

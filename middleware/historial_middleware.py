@@ -12,11 +12,8 @@ class HistorialMiddleware:
     """
     Middleware para registrar todas las peticiones HTTP en el historial.
     
-    Captura información de cada petición (método, endpoint, IP, user agent)
-    y crea un registro en la base de datos con una descripción de la acción.
-    
     Attributes:
-        app: Aplicación ASGI a la que se aplica el middleware.
+        app: Aplicación ASGI.
     """
     
     def __init__(self, app: ASGIApp):
@@ -50,13 +47,10 @@ class HistorialMiddleware:
                 """
                 Wrapper para interceptar el inicio de la respuesta HTTP.
                 
-                Registra la acción en el historial antes de enviar la respuesta.
-                
                 Args:
                     message: Mensaje ASGI a enviar.
                 """
                 if message["type"] == "http.response.start":
-                    # Determinar la acción según el endpoint y método
                     if endpoint == "/subirUsuario":
                         accion = "Creación de usuario"
                     elif endpoint == "/compararCara":

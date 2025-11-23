@@ -4,13 +4,38 @@ from io import BytesIO
 from typing import List, Optional
 
 # Imports de terceros
+import cv2
 import numpy as np
-from deepface import DeepFace
 from fastapi import HTTPException
 from PIL import Image
 from scipy.spatial.distance import cosine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+
+# RetinaFace y DeepFace se importan de forma lazy solo cuando se necesitan
+# para evitar problemas de compatibilidad al iniciar el servidor
+_RetinaFace = None
+_DeepFace = None
+
+def _get_retinaface():
+    """Importa RetinaFace de forma lazy solo cuando se necesita."""
+    global _RetinaFace
+    if _RetinaFace is None:
+        try:
+            from retinaface import RetinaFace
+            _RetinaFace = RetinaFace
+        except ImportError:
+            _RetinaFace = None
+    return _RetinaFace
+
+def _get_deepface():
+    """Importa DeepFace de forma lazy solo cuando se necesita."""
+    global _DeepFace
+    if _DeepFace is None:
+        from deepface import DeepFace
+        _DeepFace = DeepFace
+    return _DeepFace
+
 
 # Imports locales
 from model.models import Usuario
@@ -24,10 +49,72 @@ from service.storage_service import (
 # Constantes
 UMBRAL_SIMILITUD = 0.37  # Umbral para considerar rostros similares/duplicados
 
+# Configuración del modelo de reconocimiento facial
+# Modelos disponibles: VGG-Face, Facenet, Facenet512, OpenFace, DeepFace, DeepID, ArcFace, Dlib
+# RetinaFace es el mejor detector, pero también puedes usar: mtcnn, opencv, ssd, dlib
+MODELO_FACIAL = "ArcFace"  # Mejor precisión (99.41% LFW)
+DETECTOR_BACKEND = "retinaface"  # Mejor detector de rostros
+
+# MediaPipe removido - usar DeepFace para detección
+
+
+def validarRostroRapido(contenido: bytes) -> bool:
+    """
+    Valida rápidamente si hay un rostro en la imagen (SIN generar embedding).
+    Optimizado para WebSocket que necesita respuestas rápidas.
+    
+    Usa OpenCV CascadeClassifier para detección rápida de rostros (sin TensorFlow).
+    Es más rápido que validarRostro() porque no genera embeddings.
+    
+    Parámetros:
+        contenido (bytes): Contenido de la imagen en bytes.
+    
+    Retorna:
+        bool: True si hay rostro detectado, False si no.
+    
+    Excepciones:
+        HTTPException 400: Si no se envió contenido o imagen inválida.
+    """
+    if not contenido:
+        raise HTTPException(status_code=400, detail="Sin imagen")
+    
+    try:
+        # Convertir bytes a imagen numpy array
+        nparr = np.frombuffer(contenido, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        
+        if img is None:
+            raise HTTPException(status_code=400, detail="Imagen inválida")
+        
+        # Convertir a escala de grises para el detector
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        
+        # Usar el detector de rostros de OpenCV (Haar Cascade)
+        # Este detector viene incluido con OpenCV, no requiere TensorFlow
+        face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+        faces = face_cascade.detectMultiScale(
+            gray,
+            scaleFactor=1.1,
+            minNeighbors=5,
+            minSize=(30, 30)
+        )
+        
+        # Retornar True si se detectó al menos un rostro
+        return len(faces) > 0
+        
+    except HTTPException:
+        # Re-lanzar excepciones HTTP
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error al procesar imagen: {str(e)}")
+
 
 def validarRostro(contenido: bytes) -> List[float]:
     """
-    Valida una imagen y genera su embedding facial utilizando DeepFace (Facenet).
+    Valida una imagen y genera su embedding facial utilizando DeepFace.
+    
+    Modelo configurado: ArcFace (máxima precisión 99.41%)
+    Detector: RetinaFace (mejor precisión en detección de rostros)
 
     Parámetros:
         contenido (bytes): Contenido de la imagen en bytes (por ejemplo, de un archivo subido).
@@ -40,27 +127,33 @@ def validarRostro(contenido: bytes) -> List[float]:
         HTTPException 500: Si ocurre cualquier otro error al procesar la imagen.
     """
     if not contenido:
-        raise HTTPException(status_code=400, detail="No se envió contenido de imagen")
+        raise HTTPException(status_code=400, detail="Sin imagen")
 
     try:
         img = Image.open(BytesIO(contenido))
-        resultado = DeepFace.represent(img_path=np.array(img), model_name="Facenet")
+        DeepFace = _get_deepface()
+        resultado = DeepFace.represent(
+            img_path=np.array(img),
+            model_name=MODELO_FACIAL,
+            detector_backend=DETECTOR_BACKEND,
+            enforce_detection=True  # Fuerza la detección de rostro
+        )
 
         if not resultado or "embedding" not in resultado[0]:
-            raise HTTPException(status_code=400, detail="No se detectó ningún rostro")
+            raise HTTPException(status_code=400, detail="Sin rostro")
 
         embedding = resultado[0]["embedding"]
 
         if len(embedding) == 0:
-            raise HTTPException(status_code=400, detail="Rostro inválido o embedding vacío")
+            raise HTTPException(status_code=400, detail="Rostro invalido")
         
         return embedding
 
-    except ValueError:
-        raise HTTPException(status_code=400, detail="No se detectó ningún rostro")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail="Sin rostro")
 
-    except Exception:
-        raise HTTPException(status_code=500, detail="Error procesando la imagen")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Error imagen")
 
 
 def validarRostroDuplicado(db: Session, embedding: List[float], excluir_usuario_id: Optional[int] = None) -> None:
@@ -98,10 +191,7 @@ def validarRostroDuplicado(db: Session, embedding: List[float], excluir_usuario_
         
         # Si la distancia es menor al umbral, son rostros similares (duplicado)
         if distancia < UMBRAL_SIMILITUD:
-            raise HTTPException(
-                status_code=409,
-                detail="Este rostro ya está registrado."
-            )
+            raise HTTPException(status_code=409, detail="Rostro duplicado")
 
 
 def crearUsuario(db: Session, nombre: str, apellido: str, email: str, embedding: List[float], imagen: Optional[bytes] = None, content_type: Optional[str] = None) -> Usuario:
@@ -126,21 +216,21 @@ def crearUsuario(db: Session, nombre: str, apellido: str, email: str, embedding:
     """
 
     if not nombre or not nombre.strip():
-        raise HTTPException(status_code=400, detail="El nombre no puede estar vacío")
+        raise HTTPException(status_code=400, detail="Nombre vacio")
     if not apellido or not apellido.strip():
-        raise HTTPException(status_code=400, detail="El apellido no puede estar vacío")
+        raise HTTPException(status_code=400, detail="Apellido vacio")
     if len(nombre) > 100 or len(apellido) > 100:
-        raise HTTPException(status_code=400, detail="El nombre o apellido es demasiado largo")
+        raise HTTPException(status_code=400, detail="Nombre muy largo")
 
     if not email or not email.strip():
-        raise HTTPException(status_code=400, detail="El email no puede estar vacío")
+        raise HTTPException(status_code=400, detail="Email vacio")
     
     patron_email = r"^[\w\.-]+@[\w\.-]+\.\w+$"
     if not re.match(patron_email, email):
-        raise HTTPException(status_code=400, detail="El email no tiene un formato válido")
+        raise HTTPException(status_code=400, detail="Email invalido")
 
     if not embedding or not isinstance(embedding, list) or not all(isinstance(x, (float, int)) for x in embedding):
-        raise HTTPException(status_code=400, detail="Embedding inválido")
+        raise HTTPException(status_code=400, detail="Embedding invalido")
 
     # Validar que el rostro no esté duplicado
     validarRostroDuplicado(db, embedding)
@@ -152,7 +242,7 @@ def crearUsuario(db: Session, nombre: str, apellido: str, email: str, embedding:
             extension = obtener_extension_desde_content_type(content_type or "image/jpeg")
             ruta_imagen = subir_imagen(imagen, extension)
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Error al subir imagen: {str(e)}")
+            raise HTTPException(status_code=400, detail="Error subir")
 
     nuevo_usuario = Usuario(
         nombre=nombre.strip(),
@@ -169,15 +259,9 @@ def crearUsuario(db: Session, nombre: str, apellido: str, email: str, embedding:
         db.rollback()
         # Verificar si es error de email duplicado
         if "email" in str(e.orig).lower() or "duplicate" in str(e.orig).lower():
-            raise HTTPException(
-                status_code=409,
-                detail=f"El email {email} ya está registrado. Por favor, use otro email."
-            )
+            raise HTTPException(status_code=409, detail="Email duplicado")
         else:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Error al crear usuario: {str(e)}"
-            )
+            raise HTTPException(status_code=400, detail="Error crear")
 
 
 def compararRostro(db: Session, contenido: bytes) -> Optional[str]:
@@ -197,7 +281,7 @@ def compararRostro(db: Session, contenido: bytes) -> Optional[str]:
     embedding_consulta = np.array(validarRostro(contenido))
     usuarios = obtener_usuarios(db)
     if not usuarios:
-        raise HTTPException(status_code=404, detail="No hay usuarios registrados")
+        raise HTTPException(status_code=404, detail="Sin usuarios")
 
     menor_distancia = float("inf")
     usuario_reconocido = None

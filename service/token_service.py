@@ -2,12 +2,6 @@
 import random
 
 
-# NOTA: Esta implementación usa una variable global mutable para almacenar tokens en memoria.
-# En producción, se recomienda usar una solución más robusta como:
-# - Redis para gestión de sesiones
-# - JWT (JSON Web Tokens) con firma criptográfica
-# - Base de datos con tabla de sesiones/tokens
-# Esta solución es adecuada solo para desarrollo/pruebas.
 tokens_validos = set()
 
 
@@ -15,10 +9,8 @@ def generar_token() -> str:
     """
     Genera un token numérico aleatorio de 6 dígitos.
     
-    El token se almacena en memoria para validación posterior.
-    
     Returns:
-        str: Token generado (número de 6 dígitos como string).
+        str: Token generado.
     """
     token = str(random.randint(100000, 999999))
     tokens_validos.add(token)
