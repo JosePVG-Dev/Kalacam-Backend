@@ -10,13 +10,8 @@ from fastapi import HTTPException
 # Cargar variables de entorno
 load_dotenv()
 
-# Configuración de rutas para almacenamiento de imágenes
-# En Railway, el volumen se monta en la ruta especificada por VOLUMEN_PATH
-# Por defecto usa "uploads" para desarrollo local
 VOLUMEN_PATH = os.getenv("VOLUMEN_PATH", "uploads")
 IMAGENES_PATH = os.path.join(VOLUMEN_PATH, "images", "usuarios")
-
-# Crear directorio si no existe (se ejecuta automáticamente al importar el módulo)
 os.makedirs(IMAGENES_PATH, exist_ok=True)
 
 
@@ -26,42 +21,34 @@ def subir_imagen(contenido: bytes, extension: str = "jpg") -> Optional[str]:
     
     Args:
         contenido: Contenido de la imagen en bytes.
-        extension: Extensión del archivo (jpg, png, etc.). Por defecto "jpg".
+        extension: Extensión del archivo.
     
     Returns:
-        str: Ruta relativa de la imagen guardada (ej: "usuarios/uuid.jpg").
+        str: Ruta relativa de la imagen guardada.
     
     Raises:
         HTTPException: Si hay error al guardar la imagen.
     """
     try:
-        # Generar nombre único para el archivo
         nombre_archivo = f"{uuid.uuid4()}.{extension}"
         ruta_completa = os.path.join(IMAGENES_PATH, nombre_archivo)
         
-        # Guardar archivo en el volumen
         with open(ruta_completa, 'wb') as f:
             f.write(contenido)
         
-        # Retornar ruta relativa para guardar en BD
-        # Formato: usuarios/uuid.jpg
         ruta_relativa = f"usuarios/{nombre_archivo}"
-        
         return ruta_relativa
     
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error al guardar imagen en volumen: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail="Error guardar")
 
 
 def eliminar_imagen(ruta_relativa: str) -> bool:
     """
-    Elimina una imagen del volumen basándose en su ruta relativa.
+    Elimina una imagen del volumen.
     
     Args:
-        ruta_relativa: Ruta relativa de la imagen (ej: "usuarios/uuid.jpg").
+        ruta_relativa: Ruta relativa de la imagen.
     
     Returns:
         bool: True si se eliminó correctamente, False en caso contrario.
@@ -85,10 +72,10 @@ def obtener_ruta_completa(ruta_relativa: str) -> Optional[str]:
     Obtiene la ruta completa del archivo desde la ruta relativa.
     
     Args:
-        ruta_relativa: Ruta relativa guardada en BD (ej: "usuarios/uuid.jpg").
+        ruta_relativa: Ruta relativa guardada en BD.
     
     Returns:
-        Optional[str]: Ruta completa del archivo en el sistema, None si no existe.
+        Optional[str]: Ruta completa del archivo, None si no existe.
     """
     if not ruta_relativa:
         return None
@@ -101,15 +88,15 @@ def obtener_extension_desde_content_type(content_type: str) -> str:
     Obtiene la extensión del archivo desde el content-type.
     
     Args:
-        content_type: Content-Type de la imagen (ej: "image/jpeg").
+        content_type: Content-Type de la imagen.
     
     Returns:
-        str: Extensión del archivo (jpg, png, etc.). Por defecto "jpg".
+        str: Extensión del archivo.
     """
     if "jpeg" in content_type or "jpg" in content_type:
         return "jpg"
     elif "png" in content_type:
         return "png"
     else:
-        return "jpg"  # Por defecto
+        return "jpg"
 

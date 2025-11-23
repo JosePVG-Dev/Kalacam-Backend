@@ -11,7 +11,7 @@ def crear_usuario(db: Session, usuario: Usuario) -> Usuario:
     
     Args:
         db: Sesión de SQLAlchemy.
-        usuario: Instancia del modelo Usuario a crear.
+        usuario: Instancia del modelo Usuario.
     
     Returns:
         Usuario: Usuario creado con su ID asignado.

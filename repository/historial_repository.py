@@ -11,7 +11,7 @@ def crear_historial(db: Session, historial: Historial) -> Historial:
     
     Args:
         db: Sesión de SQLAlchemy.
-        historial: Instancia del modelo Historial a crear.
+        historial: Instancia del modelo Historial.
     
     Returns:
         Historial: Registro de historial creado con su ID asignado.
@@ -30,6 +30,6 @@ def obtener_historial(db: Session) -> list[Historial]:
         db: Sesión de SQLAlchemy.
     
     Returns:
-        list[Historial]: Lista de registros del historial ordenados del más reciente al más antiguo.
+        list[Historial]: Lista de registros del historial.
     """
     return db.query(Historial).order_by(Historial.fecha.desc()).all()

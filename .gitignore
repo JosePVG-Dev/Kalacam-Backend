@@ -22,3 +22,7 @@ migrations/
 # Carpeta de resultados o caches
 __pycache__/
 *.cache/
+
+# Scripts de prueba
+test_validar_rostro.py
+test_validar_rostro_gui.py
