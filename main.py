@@ -1,7 +1,6 @@
 # Imports estándar
 import asyncio
 import base64
-import concurrent.futures
 import json
 import os
 
@@ -504,8 +503,6 @@ async def websocket_prueba(websocket: WebSocket):
         print(f"Error en WebSocket: {e}")
 
 
-executor = concurrent.futures.ThreadPoolExecutor(max_workers=4, thread_name_prefix="face_validator")
-
 @app.websocket("/ws/validarRostro")
 async def websocket_validar_rostro(websocket: WebSocket):
     """
@@ -600,11 +597,7 @@ async def websocket_validar_rostro(websocket: WebSocket):
             try:
                 print("Iniciando detección rápida de rostro...")
                 
-                rostro_detectado = await asyncio.get_event_loop().run_in_executor(
-                    executor,
-                    validarRostroRapido,
-                    contenido_imagen
-                )
+                rostro_detectado = validarRostroRapido(contenido_imagen)
                 
                 if rostro_detectado:
                     await websocket.send_text(json.dumps({
