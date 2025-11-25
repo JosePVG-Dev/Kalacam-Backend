@@ -52,7 +52,7 @@ UMBRAL_SIMILITUD = 0.37  # Umbral para considerar rostros similares/duplicados
 # Configuración del modelo de reconocimiento facial
 # Modelos disponibles: VGG-Face, Facenet, Facenet512, OpenFace, DeepFace, DeepID, ArcFace, Dlib
 # RetinaFace es el mejor detector, pero también puedes usar: mtcnn, opencv, ssd, dlib
-MODELO_FACIAL = "Facenet"  # Mejor precisión (99.41% LFW)
+MODELO_FACIAL = "ArcFace"  # Mejor precisión (99.41% LFW)
 DETECTOR_BACKEND = "retinaface"  # Mejor detector de rostros
 
 # MediaPipe removido - usar DeepFace para detección
