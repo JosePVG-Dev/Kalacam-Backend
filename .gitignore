@@ -27,6 +27,7 @@ __pycache__/
 test_validar_rostro.py
 test_validar_rostro_gui.py
 
-# Modelos de DeepFace (opcional - descomentar si NO quieres versionarlos)
-# models/weights/*.h5
-# models/weights/*.pth
+# Modelos de DeepFace (archivos grandes, no versionar en Git)
+models/weights/*.h5
+models/weights/*.pth
+models/weights/retinaface/
