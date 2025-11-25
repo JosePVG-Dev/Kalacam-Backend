@@ -105,26 +105,56 @@ def _verificar_y_descargar_arcface(modelos_base: str) -> None:
     deepface_weights = os.path.join(modelos_base, ".deepface", "weights")
     os.makedirs(deepface_weights, exist_ok=True)
     
-    modelo_arcface = os.path.join(deepface_weights, "arcface_weights.h5")
-    print(f"🔍 Verificando modelo ArcFace en: {modelo_arcface}")
+    # Posibles nombres que DeepFace puede buscar para ArcFace
+    posibles_nombres = [
+        "arcface_weights.h5",
+        "ArcFace.h5",
+        "arcface.h5",
+        "ArcFace_weights.h5"
+    ]
     
-    if os.path.exists(modelo_arcface):
-        print(f"✅ Modelo ArcFace ya existe: {modelo_arcface}")
+    # Verificar si alguno de los posibles nombres ya existe
+    modelo_existente = None
+    for nombre in posibles_nombres:
+        ruta = os.path.join(deepface_weights, nombre)
+        if os.path.exists(ruta):
+            modelo_existente = ruta
+            print(f"✅ Modelo ArcFace encontrado: {ruta}")
+            break
+    
+    if modelo_existente:
         return
     
-    print("⚠️ Modelo ArcFace no encontrado")
+    print(f"⚠️ Modelo ArcFace no encontrado en: {deepface_weights}")
+    print(f"   Buscando nombres: {', '.join(posibles_nombres)}")
+    
+    # Listar archivos existentes para debugging
+    if os.path.exists(deepface_weights):
+        archivos = os.listdir(deepface_weights)
+        if archivos:
+            print(f"   📁 Archivos encontrados en weights/: {', '.join(archivos)}")
+        else:
+            print(f"   📁 Carpeta weights/ está vacía")
+    
+    # Obtener URL de descarga (personalizada o oficial de DeepFace)
     url_arcface = os.getenv("ARCFACE_DRIVE_URL")
     
-    if url_arcface:
-        print(f"📥 URL de Google Drive configurada, intentando descargar...")
-        print(f"   URL: {url_arcface}")
-        resultado = _descargar_modelo_desde_drive(url_arcface, modelo_arcface)
-        if resultado:
-            print(f"✅ Modelo descargado exitosamente en la ubicación correcta para DeepFace")
-        else:
-            print(f"❌ Error al descargar el modelo")
+    if not url_arcface:
+        # URL oficial de DeepFace (extraída del código fuente de DeepFace)
+        url_arcface = "https://drive.google.com/uc?id=1LVB3CdVejpmGHM28BpqqkbZP5hDEcdZY"
+        print(f"⚠️ ARCFACE_DRIVE_URL no configurada, usando URL oficial de DeepFace")
+    
+    print(f"📥 Descargando modelo ArcFace...")
+    print(f"   URL: {url_arcface}")
+    
+    # Descargar con el primer nombre (el más común)
+    modelo_arcface = os.path.join(deepface_weights, posibles_nombres[0])
+    resultado = _descargar_modelo_desde_drive(url_arcface, modelo_arcface)
+    if resultado:
+        print(f"✅ Modelo descargado exitosamente: {modelo_arcface}")
     else:
-        print("⚠️ ARCFACE_DRIVE_URL no está configurada. Configura esta variable para descargar automáticamente.")
+        print(f"❌ Error al descargar el modelo")
+        print(f"   DeepFace intentará descargarlo automáticamente cuando se use por primera vez")
 
 
 def _configurar_deepface_home() -> str:
@@ -201,20 +231,97 @@ def inicializar_modelos():
     print(f"📁 Directorio de modelos configurado: {modelos_base}")
 
 
+def _patch_deepface_url():
+    """
+    Monkey-patch para reemplazar la URL de descarga hardcodeada en DeepFace ArcFace.
+    El link original de DeepFace está caído, usamos nuestra URL personalizada.
+    """
+    try:
+        # Importar el módulo de ArcFace
+        from deepface.basemodels import ArcFace
+        import inspect
+        
+        # Obtener el código fuente de la función loadModel
+        source = inspect.getsource(ArcFace.loadModel)
+        
+        # Si contiene la URL original, hacer monkey-patch
+        if "https://drive.google.com/uc?id=1LVB3CdVejpmGHM28BpqqkbZP5hDEcdZY" in source:
+            print("🔧 Aplicando monkey-patch a DeepFace ArcFace URL...")
+            
+            # Reemplazar la función loadModel con una versión parcheada
+            original_loadModel = ArcFace.loadModel
+            
+            def patched_loadModel():
+                # Guardar la función original de gdown
+                import gdown
+                original_download = gdown.download
+                
+                def patched_download(url, *args, **kwargs):
+                    # Reemplazar URL si es la original (caída)
+                    if url == "https://drive.google.com/uc?id=1LVB3CdVejpmGHM28BpqqkbZP5hDEcdZY":
+                        custom_url = os.getenv("ARCFACE_DRIVE_URL", "https://drive.google.com/uc?id=1mjLC2mBJz71SDWnTcYTbrqE27RtOmMTk")
+                        print(f"🔄 Reemplazando URL de DeepFace por: {custom_url}")
+                        url = custom_url
+                    return original_download(url, *args, **kwargs)
+                
+                # Aplicar el patch temporalmente
+                gdown.download = patched_download
+                try:
+                    result = original_loadModel()
+                finally:
+                    # Restaurar la función original
+                    gdown.download = original_download
+                
+                return result
+            
+            ArcFace.loadModel = patched_loadModel
+            print("✅ Monkey-patch aplicado correctamente")
+    except Exception as e:
+        print(f"⚠️ No se pudo aplicar monkey-patch: {e}")
+        print("   DeepFace usará su configuración por defecto")
+
+
 def get_deepface():
     """
     Importa DeepFace de forma lazy solo cuando se necesita.
     Configura el entorno de modelos automáticamente en la primera llamada.
+    
+    IMPORTANTE: DEEPFACE_HOME debe configurarse ANTES de importar DeepFace,
+    porque DeepFace lee esta variable al importarse.
     
     Returns:
         DeepFace module
     """
     global _DeepFace
     if _DeepFace is None:
+        # CRÍTICO: Configurar DEEPFACE_HOME ANTES de importar DeepFace
+        # DeepFace lee esta variable cuando se importa por primera vez
+        modelos_base = _configurar_deepface_home()
+        print(f"🔧 DEEPFACE_HOME configurado: {modelos_base}")
+        print(f"🔧 Variable de entorno DEEPFACE_HOME: {os.getenv('DEEPFACE_HOME')}")
+        
+        # Verificar archivos antes de importar DeepFace
+        deepface_weights = os.path.join(modelos_base, ".deepface", "weights")
+        archivos_antes = []
+        if os.path.exists(deepface_weights):
+            archivos_antes = os.listdir(deepface_weights)
+            print(f"🔧 Archivos en .deepface/weights/ ANTES de importar: {archivos_antes if archivos_antes else '(vacío)'}")
+        
+        # Ahora sí importar DeepFace (ya con DEEPFACE_HOME configurado)
         from deepface import DeepFace
         
-        # Configurar el entorno de modelos antes de usar DeepFace
-        _configurar_deepface_home()
+        # Aplicar monkey-patch para usar nuestra URL personalizada
+        _patch_deepface_url()
+        
+        # Verificar archivos después de importar (DeepFace puede haber creado/descargado archivos)
+        if os.path.exists(deepface_weights):
+            archivos_despues = os.listdir(deepface_weights)
+            if archivos_despues != archivos_antes:
+                nuevos = set(archivos_despues) - set(archivos_antes)
+                if nuevos:
+                    print(f"⚠️ DeepFace creó/descargó archivos después de importar: {list(nuevos)}")
+                    print(f"   Esto significa que DeepFace no encontró tu modelo y descargó el suyo")
+            print(f"🔧 Archivos en .deepface/weights/ DESPUÉS de importar: {archivos_despues if archivos_despues else '(vacío)'}")
         
         _DeepFace = DeepFace
     return _DeepFace
