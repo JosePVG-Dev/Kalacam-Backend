@@ -56,6 +56,7 @@ app.add_middleware(
 
 # Middlewares
 app.add_middleware(HistorialMiddleware)
+app.add_middleware(AuthMiddleware)
 
 # Security
 bearer_scheme = HTTPBearer()
