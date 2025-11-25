@@ -151,9 +151,31 @@ def validarRostro(contenido: bytes) -> List[float]:
 
     except ValueError as e:
         raise HTTPException(status_code=400, detail="Sin rostro")
-
+    
+    except HTTPException:
+        # Re-lanzar HTTPExceptions
+        raise
+    
+    except ImportError as e:
+        # Error al importar DeepFace o sus dependencias
+        error_msg = str(e)
+        print(f"Error de importación en validarRostro: {error_msg}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Error de importación: DeepFace o sus dependencias no están disponibles. {error_msg}"
+        )
+    
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Error imagen")
+        # Log del error real para debugging
+        error_msg = str(e)
+        error_type = type(e).__name__
+        print(f"Error en validarRostro: {error_type}: {error_msg}")
+        
+        # Retornar error más descriptivo con el tipo y mensaje
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Error al procesar imagen ({error_type}): {error_msg}"
+        )
 
 
 def validarRostroDuplicado(db: Session, embedding: List[float], excluir_usuario_id: Optional[int] = None) -> None:
