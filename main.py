@@ -392,10 +392,12 @@ async def comparar_cara(
         db: Sesión de base de datos.
     
     Returns:
-        dict: Token de autenticación si el rostro es reconocido.
+        Response: Respuesta con código HTTP explícito.
+            - 200: Si el rostro es reconocido (con token)
+            - 401: Si el rostro no es reconocido
     
     Raises:
-        HTTPException: Si el rostro no es reconocido o la imagen es inválida.
+        HTTPException: Si la imagen es inválida (400).
     """
     if imagen.content_type not in ["image/jpeg", "image/png"]:
         raise HTTPException(status_code=400, detail="Archivo invalido")
@@ -405,9 +407,17 @@ async def comparar_cara(
 
     if nombre_usuario:
         token = generar_token()
-        return {"token": f"Hola {nombre_usuario}, token: {token}"}
+        return Response(
+            status_code=200,
+            content=json.dumps({"token": f"Hola {nombre_usuario}, token: {token}"}),
+            media_type="application/json"
+        )
     else:
-        raise HTTPException(status_code=401, detail="No reconocido")
+        return Response(
+            status_code=401,
+            content=json.dumps({"mensaje": "No reconocido"}),
+            media_type="application/json"
+        )
 
 
 # -------------------- HISTORIAL PROTEGIDO --------------------
