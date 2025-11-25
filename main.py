@@ -14,7 +14,6 @@ from sqlalchemy.orm import Session
 
 # Imports locales
 from database.database import Base, engine, SessionLocal
-from middleware.auth_middleware import AuthMiddleware
 from middleware.historial_middleware import HistorialMiddleware
 from model.models import Historial, TokenRequest, Usuario
 from repository.historial_repository import crear_historial, obtener_historial
@@ -66,7 +65,6 @@ app.add_middleware(
 
 # Middlewares
 app.add_middleware(HistorialMiddleware)
-app.add_middleware(AuthMiddleware)
 
 # Security
 bearer_scheme = HTTPBearer()
