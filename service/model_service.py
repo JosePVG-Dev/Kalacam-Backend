@@ -91,14 +91,21 @@ def _copiar_modelos_locales_a_volumen(modelos_locales: str, modelos_weights: str
                 print(f"✅ Modelo copiado: {archivo}")
 
 
-def _verificar_y_descargar_arcface(modelos_weights: str) -> None:
+def _verificar_y_descargar_arcface(modelos_base: str) -> None:
     """
     Verifica si existe el modelo ArcFace y lo descarga desde Google Drive si es necesario.
     
+    DeepFace busca modelos en: {DEEPFACE_HOME}/.deepface/weights/
+    Por eso descargamos directamente ahí.
+    
     Args:
-        modelos_weights: Ruta donde deben estar los modelos (/data/models/deepface/weights)
+        modelos_base: Ruta base de modelos (DEEPFACE_HOME) (/data/models/deepface)
     """
-    modelo_arcface = os.path.join(modelos_weights, "arcface_weights.h5")
+    # DeepFace guarda modelos en .deepface/weights dentro de DEEPFACE_HOME
+    deepface_weights = os.path.join(modelos_base, ".deepface", "weights")
+    os.makedirs(deepface_weights, exist_ok=True)
+    
+    modelo_arcface = os.path.join(deepface_weights, "arcface_weights.h5")
     print(f"🔍 Verificando modelo ArcFace en: {modelo_arcface}")
     
     if os.path.exists(modelo_arcface):
@@ -113,7 +120,7 @@ def _verificar_y_descargar_arcface(modelos_weights: str) -> None:
         print(f"   URL: {url_arcface}")
         resultado = _descargar_modelo_desde_drive(url_arcface, modelo_arcface)
         if resultado:
-            print(f"✅ Modelo descargado exitosamente")
+            print(f"✅ Modelo descargado exitosamente en la ubicación correcta para DeepFace")
         else:
             print(f"❌ Error al descargar el modelo")
     else:
@@ -134,17 +141,30 @@ def _configurar_deepface_home() -> str:
         volumen_path = os.getenv("VOLUMEN_PATH", "uploads")
         modelos_base = os.path.join(volumen_path, "models", "deepface")
     
-    modelos_weights = os.path.join(modelos_base, "weights")
-    # Crear todos los directorios necesarios
-    os.makedirs(modelos_weights, exist_ok=True)
+    # DeepFace guarda modelos en .deepface/weights dentro de DEEPFACE_HOME
+    deepface_weights = os.path.join(modelos_base, ".deepface", "weights")
+    os.makedirs(deepface_weights, exist_ok=True)
     
     # Si hay modelos en la carpeta local del proyecto, copiarlos al volumen
     proyecto_base = os.path.dirname(os.path.dirname(__file__))
     modelos_locales = os.path.join(proyecto_base, "models", "weights")
-    _copiar_modelos_locales_a_volumen(modelos_locales, modelos_weights)
+    if os.path.exists(modelos_locales):
+        # Copiar modelos locales a la ubicación que DeepFace espera
+        for archivo in os.listdir(modelos_locales):
+            if archivo.endswith(('.h5', '.pth')) or os.path.isdir(os.path.join(modelos_locales, archivo)):
+                origen = os.path.join(modelos_locales, archivo)
+                destino = os.path.join(deepface_weights, archivo)
+                if os.path.isdir(origen):
+                    if not os.path.exists(destino):
+                        shutil.copytree(origen, destino)
+                        print(f"✅ Directorio de modelo copiado: {archivo}")
+                elif not os.path.exists(destino):
+                    shutil.copy2(origen, destino)
+                    print(f"✅ Modelo copiado: {archivo}")
     
     # Verificar si falta el modelo ArcFace y descargarlo desde Google Drive si hay URL configurada
-    _verificar_y_descargar_arcface(modelos_weights)
+    # IMPORTANTE: Descargar directamente en la ubicación que DeepFace espera
+    _verificar_y_descargar_arcface(modelos_base)
     
     # Configurar variable de entorno para DeepFace
     os.environ["DEEPFACE_HOME"] = modelos_base
