@@ -17,14 +17,17 @@ python-dotenv==1.1.1
 email-validator==2.3.0
 
 # Reconocimiento facial
-# DeepFace 0.0.53 es estable y compatible
-# Instalará automáticamente TensorFlow y sus dependencias compatibles
+# DeepFace 0.0.53 requiere TensorFlow 2.15.x con Keras 2.15.x
+# Versiones específicas para evitar conflictos con Keras 3.x
+tensorflow==2.15.0
+tf-keras==2.15.0
+keras==2.15.0
 deepface==0.0.53
 
 # Procesamiento de imágenes (requerido por DeepFace y validarRostroRapido)
 opencv-python==4.12.0.88
 pillow==12.0.0
-numpy==2.2.6
+numpy==1.26.4  # TensorFlow 2.15 requiere numpy < 2.0.0
 scipy==1.16.2
 
 # Utilidades
