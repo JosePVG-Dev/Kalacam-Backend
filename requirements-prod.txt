@@ -25,7 +25,8 @@ keras==2.15.0
 deepface==0.0.53
 
 # Procesamiento de imágenes (requerido por DeepFace y validarRostroRapido)
-opencv-python==4.12.0.88
+# OpenCV 4.8.x es compatible con numpy < 2.0 (requerido por TensorFlow 2.15)
+opencv-python==4.8.1.78
 pillow==12.0.0
 numpy==1.26.4  # TensorFlow 2.15 requiere numpy < 2.0.0
 scipy==1.16.2
