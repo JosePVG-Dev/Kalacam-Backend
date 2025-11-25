@@ -23,29 +23,44 @@ def _descargar_modelo_desde_drive(url_drive: str, destino: str) -> bool:
     try:
         import gdown
         
+        url_original = url_drive
+        
         # Convertir URL de Google Drive al formato correcto si es necesario
         if "drive.google.com/file/d/" in url_drive:
             # Extraer el ID del archivo
             file_id = url_drive.split("/file/d/")[1].split("/")[0]
             url_drive = f"https://drive.google.com/uc?id={file_id}"
+            print(f"   🔄 URL convertida: {url_drive}")
         elif "id=" not in url_drive and "drive.google.com" in url_drive:
             # Si es un enlace compartido, extraer el ID
             if "/d/" in url_drive:
                 file_id = url_drive.split("/d/")[1].split("/")[0]
                 url_drive = f"https://drive.google.com/uc?id={file_id}"
+                print(f"   🔄 URL convertida: {url_drive}")
         
         print(f"📥 Descargando modelo desde Google Drive...")
+        print(f"   Destino: {destino}")
+        
+        # Asegurar que el directorio destino existe
+        os.makedirs(os.path.dirname(destino), exist_ok=True)
+        
+        # Descargar con gdown
         gdown.download(url_drive, destino, quiet=False)
         
         if os.path.exists(destino):
-            print(f"✅ Modelo descargado exitosamente: {destino}")
+            tamaño = os.path.getsize(destino) / (1024 * 1024)  # Tamaño en MB
+            print(f"✅ Modelo descargado exitosamente: {destino} ({tamaño:.2f} MB)")
             return True
         else:
             print(f"❌ Error: El archivo no se descargó correctamente")
             return False
             
+    except ImportError:
+        print(f"❌ Error: gdown no está instalado. Instala con: pip install gdown")
+        return False
     except Exception as e:
         print(f"❌ Error al descargar modelo desde Drive: {str(e)}")
+        print(f"   Tipo de error: {type(e).__name__}")
         return False
 
 
@@ -84,13 +99,25 @@ def _verificar_y_descargar_arcface(modelos_weights: str) -> None:
         modelos_weights: Ruta donde deben estar los modelos (/data/models/deepface/weights)
     """
     modelo_arcface = os.path.join(modelos_weights, "arcface_weights.h5")
-    if not os.path.exists(modelo_arcface):
-        url_arcface = os.getenv("ARCFACE_DRIVE_URL")
-        if url_arcface:
-            print("⚠️ Modelo ArcFace no encontrado, intentando descargar desde Google Drive...")
-            _descargar_modelo_desde_drive(url_arcface, modelo_arcface)
+    print(f"🔍 Verificando modelo ArcFace en: {modelo_arcface}")
+    
+    if os.path.exists(modelo_arcface):
+        print(f"✅ Modelo ArcFace ya existe: {modelo_arcface}")
+        return
+    
+    print("⚠️ Modelo ArcFace no encontrado")
+    url_arcface = os.getenv("ARCFACE_DRIVE_URL")
+    
+    if url_arcface:
+        print(f"📥 URL de Google Drive configurada, intentando descargar...")
+        print(f"   URL: {url_arcface}")
+        resultado = _descargar_modelo_desde_drive(url_arcface, modelo_arcface)
+        if resultado:
+            print(f"✅ Modelo descargado exitosamente")
         else:
-            print("⚠️ Modelo ArcFace no encontrado. Configura ARCFACE_DRIVE_URL para descargarlo automáticamente.")
+            print(f"❌ Error al descargar el modelo")
+    else:
+        print("⚠️ ARCFACE_DRIVE_URL no está configurada. Configura esta variable para descargar automáticamente.")
 
 
 def _configurar_deepface_home() -> str:
@@ -101,9 +128,14 @@ def _configurar_deepface_home() -> str:
         str: Ruta base configurada para DeepFace (DEEPFACE_HOME)
     """
     # Configurar directorio de modelos
-    volumen_path = os.getenv("VOLUMEN_PATH", "uploads")
-    modelos_base = os.path.join(volumen_path, "models", "deepface")
+    # Usar MODELS_PATH si está configurado, sino construir desde VOLUMEN_PATH
+    modelos_base = os.getenv("MODELS_PATH")
+    if not modelos_base:
+        volumen_path = os.getenv("VOLUMEN_PATH", "uploads")
+        modelos_base = os.path.join(volumen_path, "models", "deepface")
+    
     modelos_weights = os.path.join(modelos_base, "weights")
+    # Crear todos los directorios necesarios
     os.makedirs(modelos_weights, exist_ok=True)
     
     # Si hay modelos en la carpeta local del proyecto, copiarlos al volumen
@@ -135,6 +167,18 @@ def get_retinaface():
         except ImportError:
             _RetinaFace = None
     return _RetinaFace
+
+
+def inicializar_modelos():
+    """
+    Inicializa los modelos en el startup del servidor.
+    Verifica y descarga modelos si es necesario, sin importar DeepFace todavía.
+    """
+    print("🔧 Inicializando directorios y modelos...")
+    # Solo configurar directorios y verificar/descargar modelos
+    # Sin importar DeepFace (se importa lazy cuando se necesite)
+    modelos_base = _configurar_deepface_home()
+    print(f"📁 Directorio de modelos configurado: {modelos_base}")
 
 
 def get_deepface():

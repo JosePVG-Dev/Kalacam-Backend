@@ -12,6 +12,7 @@ load_dotenv()
 
 VOLUMEN_PATH = os.getenv("VOLUMEN_PATH", "uploads")
 IMAGENES_PATH = os.path.join(VOLUMEN_PATH, "images", "usuarios")
+# Crear directorios necesarios
 os.makedirs(IMAGENES_PATH, exist_ok=True)
 
 

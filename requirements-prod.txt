@@ -38,6 +38,7 @@ certifi==2025.10.5
 charset-normalizer==3.4.4
 idna==3.11
 cryptography
+gdown==5.2.0  # Para descargar modelos desde Google Drive
 
 # HTTP y networking
 httptools==0.7.1

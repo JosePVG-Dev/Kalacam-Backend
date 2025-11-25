@@ -32,16 +32,28 @@ from service.storage_service import (
     subir_imagen
 )
 from service.token_service import generar_token, validar_token
+from service.model_service import inicializar_modelos
 
 
 # -------------------- CONFIG --------------------
-Base.metadata.create_all(bind=engine)
-
 app = FastAPI(
     title="API de Reconocimiento Facial IoT",
     description="API para gestión de usuarios con reconocimiento facial",
     version="1.0.0"
 )
+
+@app.on_event("startup")
+async def startup_event():
+    """
+    Evento de startup: inicializa base de datos y modelos.
+    """
+    # Crear tablas de base de datos
+    Base.metadata.create_all(bind=engine)
+    
+    # Inicializar modelos (verificar y descargar si es necesario)
+    print("🔧 Inicializando modelos de DeepFace...")
+    inicializar_modelos()
+    print("✅ Modelos inicializados correctamente")
 origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
