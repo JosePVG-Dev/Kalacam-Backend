@@ -26,3 +26,8 @@ __pycache__/
 # Scripts de prueba
 test_validar_rostro.py
 test_validar_rostro_gui.py
+
+# Modelos de DeepFace (demasiado grandes para Git)
+models/weights/*.h5
+models/weights/*.pth
+models/weights/retinaface/
