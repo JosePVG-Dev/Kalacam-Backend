@@ -12,62 +12,8 @@ from scipy.spatial.distance import cosine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-# RetinaFace y DeepFace se importan de forma lazy solo cuando se necesitan
-# para evitar problemas de compatibilidad al iniciar el servidor
-_RetinaFace = None
-_DeepFace = None
-
-def _get_retinaface():
-    """Importa RetinaFace de forma lazy solo cuando se necesita."""
-    global _RetinaFace
-    if _RetinaFace is None:
-        try:
-            from retinaface import RetinaFace
-            _RetinaFace = RetinaFace
-        except ImportError:
-            _RetinaFace = None
-    return _RetinaFace
-
-def _get_deepface():
-    """Importa DeepFace de forma lazy solo cuando se necesita."""
-    global _DeepFace
-    if _DeepFace is None:
-        import os
-        import shutil
-        from deepface import DeepFace
-        
-        # Configurar directorio de modelos
-        volumen_path = os.getenv("VOLUMEN_PATH", "uploads")
-        modelos_base = os.path.join(volumen_path, "models", "deepface")
-        modelos_weights = os.path.join(modelos_base, "weights")
-        os.makedirs(modelos_weights, exist_ok=True)
-        
-        # Si hay modelos en la carpeta local del proyecto, copiarlos al volumen
-        modelos_locales = os.path.join(os.path.dirname(os.path.dirname(__file__)), "models", "weights")
-        if os.path.exists(modelos_locales):
-            for archivo in os.listdir(modelos_locales):
-                if archivo.endswith(('.h5', '.pth')) or os.path.isdir(os.path.join(modelos_locales, archivo)):
-                    origen = os.path.join(modelos_locales, archivo)
-                    destino = os.path.join(modelos_weights, archivo)
-                    
-                    # Si es un directorio (como retinaface), copiar recursivamente
-                    if os.path.isdir(origen):
-                        if not os.path.exists(destino):
-                            shutil.copytree(origen, destino)
-                            print(f"✅ Directorio de modelo copiado: {archivo}")
-                    # Si es un archivo y no existe en destino, copiarlo
-                    elif not os.path.exists(destino):
-                        shutil.copy2(origen, destino)
-                        print(f"✅ Modelo copiado: {archivo}")
-        
-        # Configurar variable de entorno para DeepFace
-        os.environ["DEEPFACE_HOME"] = modelos_base
-        
-        _DeepFace = DeepFace
-    return _DeepFace
-
-
 # Imports locales
+from service.model_service import get_deepface, get_retinaface
 from model.models import Usuario
 from repository.usuario_repository import crear_usuario, obtener_usuarios
 from service.storage_service import (
@@ -161,7 +107,7 @@ def validarRostro(contenido: bytes) -> List[float]:
 
     try:
         img = Image.open(BytesIO(contenido))
-        DeepFace = _get_deepface()
+        DeepFace = get_deepface()
         resultado = DeepFace.represent(
             img_path=np.array(img),
             model_name=MODELO_FACIAL,
