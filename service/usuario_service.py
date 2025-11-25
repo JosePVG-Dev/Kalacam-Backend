@@ -1,5 +1,8 @@
 # Imports estándar
+import logging
+import os
 import re
+import tempfile
 from io import BytesIO
 from typing import List, Optional
 
@@ -11,9 +14,6 @@ from PIL import Image
 from scipy.spatial.distance import cosine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-
-# Imports locales
-from service.model_service import get_deepface, get_retinaface
 from model.models import Usuario
 from repository.usuario_repository import crear_usuario, obtener_usuarios
 from service.storage_service import (
@@ -32,6 +32,22 @@ MODELO_FACIAL = "ArcFace"  # Mejor precisión (99.41% LFW)
 DETECTOR_BACKEND = "retinaface"  # Mejor detector de rostros
 
 # MediaPipe removido - usar DeepFace para detección
+
+# Logger del módulo
+logger = logging.getLogger(__name__)
+
+_deepface_module = None
+
+
+def _get_deepface():
+    """
+    Obtiene el módulo DeepFace importado de forma lazy.
+    """
+    global _deepface_module
+    if _deepface_module is None:
+        from deepface import DeepFace as DeepFaceModule
+        _deepface_module = DeepFaceModule
+    return _deepface_module
 
 
 def validarRostroRapido(contenido: bytes) -> bool:
@@ -60,7 +76,7 @@ def validarRostroRapido(contenido: bytes) -> bool:
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         
         if img is None:
-            raise HTTPException(status_code=400, detail="Imagen inválida")
+            raise HTTPException(status_code=400, detail="Imagen invalida")
         
         # Convertir a escala de grises para el detector
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -82,7 +98,8 @@ def validarRostroRapido(contenido: bytes) -> bool:
         # Re-lanzar excepciones HTTP
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Error al procesar imagen: {str(e)}")
+        logger.error("Error en validarRostroRapido: %s", str(e))
+        raise HTTPException(status_code=400, detail="Error procesar imagen")
 
 
 def validarRostro(contenido: bytes) -> List[float]:
@@ -94,64 +111,117 @@ def validarRostro(contenido: bytes) -> List[float]:
 
     Parámetros:
         contenido (bytes): Contenido de la imagen en bytes (por ejemplo, de un archivo subido).
-
-    Retorna:
-        List[float]: Embedding del rostro como lista de floats.
-
-    Excepciones:
-        HTTPException 400: Si no se envió contenido, no se detecta rostro o embedding vacío.
+@@ -40,27 +127,33 @@ def validarRostro(contenido: bytes) -> List[float]:
         HTTPException 500: Si ocurre cualquier otro error al procesar la imagen.
     """
     if not contenido:
         raise HTTPException(status_code=400, detail="Sin imagen")
 
+    # Create a temporary file for DeepFace
+    # DeepFace works best with file paths across all versions
+    temp_file = None
     try:
-        img = Image.open(BytesIO(contenido))
-        DeepFace = get_deepface()
+        img = Image.open(BytesIO(contenido)).convert("RGB")
+        
+        # Save to temporary file
+        temp_file = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
+        img.save(temp_file.name, format="JPEG")
+        temp_path = temp_file.name
+        temp_file.close()
+        
+        logger.info(
+            "🔍 DeepFace.represent inicio | modelo=%s detector=%s size=%s temp_file=%s",
+            MODELO_FACIAL,
+            DETECTOR_BACKEND,
+            img.size,
+            temp_path
+        )
+        print(
+            f"[DeepFace] Iniciando represent | modelo={MODELO_FACIAL} "
+            f"detector={DETECTOR_BACKEND} size={img.size} temp_file={temp_path}"
+        )
+        
+        DeepFace = _get_deepface()
+        
+        # DeepFace 0.0.96+ returns a list of dicts with 'embedding' key
         resultado = DeepFace.represent(
-            img_path=np.array(img),
+            img_path=temp_path,
             model_name=MODELO_FACIAL,
             detector_backend=DETECTOR_BACKEND,
             enforce_detection=True  # Fuerza la detección de rostro
         )
 
-        if not resultado or "embedding" not in resultado[0]:
+        if resultado is None:
             raise HTTPException(status_code=400, detail="Sin rostro")
 
-        embedding = resultado[0]["embedding"]
+        # Normalize DeepFace output (handles both old and new versions)
+        if isinstance(resultado, list):
+            # New versions (0.0.96+) return list of dicts
+            if len(resultado) > 0 and isinstance(resultado[0], dict) and "embedding" in resultado[0]:
+                resultados = resultado
+            # Old versions (0.0.53) return just the embedding list
+            elif len(resultado) > 0 and isinstance(resultado[0], (int, float)):
+                embedding = resultado
+                logger.info("🔢 Embedding generado (old format) | dimension=%d | primeros_valores=%s...", len(embedding), embedding[:5])
+                print(f"[DeepFace] Embedding generado (old format) dimension={len(embedding)} primeros_valores={embedding[:5]}")
+                return embedding
+            else:
+                raise HTTPException(status_code=400, detail="Sin rostro")
+        elif isinstance(resultado, dict) and "embedding" in resultado:
+            resultados = [resultado]
+        else:
+            logger.error("Respuesta inesperada de DeepFace: %s", type(resultado))
+            raise HTTPException(status_code=500, detail="Error inesperado")
+
+        rostros_detectados = len(resultados)
+        logger.info("✅ DeepFace.represent completado | rostros_detectados=%s", rostros_detectados)
+        print(f"[DeepFace] Represent completado | rostros_detectados={rostros_detectados}")
+
+        if rostros_detectados == 0 or "embedding" not in resultados[0]:
+            raise HTTPException(status_code=400, detail="Sin rostro")
+
+        embedding = resultados[0]["embedding"]
 
         if len(embedding) == 0:
             raise HTTPException(status_code=400, detail="Rostro invalido")
         
+        logger.info("🔢 Embedding generado | dimension=%d | primeros_valores=%s...", len(embedding), embedding[:5])
+        print(f"[DeepFace] Embedding generado dimension={len(embedding)} primeros_valores={embedding[:5]}")
+
         return embedding
 
     except ValueError as e:
-        raise HTTPException(status_code=400, detail="Sin rostro")
+        error_msg = str(e)
+        logger.warning("⚠️ Sin rostro detectado: %s", error_msg)
+        print(f"[DeepFace] Sin rostro detectado: {error_msg}")
+        raise HTTPException(status_code=400, detail="Rostro no detectado")
     
     except HTTPException:
-        # Re-lanzar HTTPExceptions
         raise
     
     except ImportError as e:
-        # Error al importar DeepFace o sus dependencias
         error_msg = str(e)
+        logger.error("❌ Error de importación en validarRostro: %s", error_msg)
         print(f"Error de importación en validarRostro: {error_msg}")
-        raise HTTPException(
-            status_code=500, 
-            detail=f"Error de importación: DeepFace o sus dependencias no están disponibles. {error_msg}"
-        )
+        raise HTTPException(status_code=500, detail="Error de importación")
     
     except Exception as e:
-        # Log del error real para debugging
         error_msg = str(e)
         error_type = type(e).__name__
-        print(f"Error en validarRostro: {error_type}: {error_msg}")
-        
-        # Retornar error más descriptivo con el tipo y mensaje
-        raise HTTPException(
-            status_code=500, 
-            detail=f"Error al procesar imagen ({error_type}): {error_msg}"
-        )
+        logger.error("❌ Error en DeepFace.represent | tipo=%s detalle=%s", error_type, error_msg)
+        print(f"[DeepFace] Error ({error_type}): {error_msg}")
+        raise HTTPException(status_code=500, detail="Error procesar imagen")
+    
+    finally:
+        # Clean up temporary file
+        if temp_file is not None:
+            try:
+                if os.path.exists(temp_path):
+                    os.unlink(temp_path)
+                    logger.debug("🗑️ Archivo temporal eliminado: %s", temp_path)
+            except Exception as cleanup_error:
+                logger.warning("⚠️ No se pudo eliminar archivo temporal %s: %s", temp_path, cleanup_error)
+
 
 
 def validarRostroDuplicado(db: Session, embedding: List[float], excluir_usuario_id: Optional[int] = None) -> None:
@@ -173,6 +243,8 @@ def validarRostroDuplicado(db: Session, embedding: List[float], excluir_usuario_
     usuarios = obtener_usuarios(db)
     
     # Comparar con cada usuario existente
+    logger.info("🔍 Comparando embedding con %d usuarios registrados", len(usuarios))
+    print(f"[DeepFace] Comparando contra {len(usuarios)} usuarios")
     for usuario in usuarios:
         # Excluir el usuario que se está actualizando
         if excluir_usuario_id and usuario.id == excluir_usuario_id:
@@ -189,6 +261,8 @@ def validarRostroDuplicado(db: Session, embedding: List[float], excluir_usuario_
         
         # Si la distancia es menor al umbral, son rostros similares (duplicado)
         if distancia < UMBRAL_SIMILITUD:
+            logger.warning("⚠️ Rostro duplicado detectado con usuario_id=%s distancia=%.4f", usuario.id, distancia)
+            print(f"[DeepFace] Rostro duplicado con usuario_id={usuario.id} distancia={distancia:.4f}")
             raise HTTPException(status_code=409, detail="Rostro duplicado")
 
 
@@ -276,6 +350,8 @@ def compararRostro(db: Session, contenido: bytes) -> Optional[str]:
     Excepciones:
         HTTPException 404: Si no hay usuarios registrados.
     """
+    logger.info("📸 Iniciando comparación de rostro")
+    print("[DeepFace] Iniciando comparación completa")
     embedding_consulta = np.array(validarRostro(contenido))
     usuarios = obtener_usuarios(db)
     if not usuarios:
@@ -294,6 +370,14 @@ def compararRostro(db: Session, contenido: bytes) -> Optional[str]:
             usuario_reconocido = usuario
 
     if menor_distancia < UMBRAL_SIMILITUD and usuario_reconocido:
+        logger.info(
+            "✅ Rostro reconocido | usuario_id=%s distancia=%.4f",
+            usuario_reconocido.id,
+            menor_distancia
+        )
+        print(f"[DeepFace] Rostro reconocido usuario_id={usuario_reconocido.id} distancia={menor_distancia:.4f}")
         return usuario_reconocido.nombre
     
+    logger.info("ℹ️ Rostro no reconocido | menor_distancia=%.4f", menor_distancia)
+    print(f"[DeepFace] Rostro NO reconocido | menor_distancia={menor_distancia:.4f}")
     return None
