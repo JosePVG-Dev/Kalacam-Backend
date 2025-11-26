@@ -313,8 +313,7 @@ def delete_usuario(
 # -------------------- SERVIR IMÁGENES (PROTEGIDO) --------------------
 @app.get("/imagenes/{ruta:path}")
 def servir_imagen(
-    ruta: str,
-    auth: None = Depends(auth_required)
+    ruta: str
 ):
     """
     Sirve imágenes desde el volumen.
