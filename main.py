@@ -343,6 +343,38 @@ def servir_imagen(
     
     return FileResponse(ruta_completa, media_type=media_type)   
 
+# -------------------- SERVIR IMÁGENES DE USUARIOS (PÚBLICO) --------------------
+@app.get("/imagenes/usuarios/{nombre_archivo:path}")
+def servir_imagen_usuario(nombre_archivo: str):
+    """
+    Sirve imágenes de usuarios desde el volumen.
+    
+    Args:
+        nombre_archivo: Nombre del archivo de imagen (ej: c125842a-f243-4b53-9422-3d71312016b6.jpg).
+    
+    Returns:
+        FileResponse: Imagen solicitada.
+    
+    Raises:
+        HTTPException: Si la imagen no existe.
+    """
+    # Construir la ruta relativa
+    ruta_relativa = f"usuarios/{nombre_archivo}"
+    ruta_completa = obtener_ruta_completa(ruta_relativa)
+    
+    if not ruta_completa or not os.path.exists(ruta_completa):
+        raise HTTPException(status_code=404, detail="Imagen no encontrada")
+    
+    # Determinar content-type según extensión
+    if nombre_archivo.lower().endswith('.png'):
+        media_type = 'image/png'
+    elif nombre_archivo.lower().endswith('.jpg') or nombre_archivo.lower().endswith('.jpeg'):
+        media_type = 'image/jpeg'
+    else:
+        media_type = 'image/jpeg'
+    
+    return FileResponse(ruta_completa, media_type=media_type)
+
 # -------------------- VALIDAR ROSTRO RÁPIDO (PÚBLICO - PRUEBA) --------------------
 @app.post("/ws/validarRostro")  
 async def validar_rostro_rapido_endpoint(

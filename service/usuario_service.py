@@ -2,15 +2,12 @@
 import logging
 import os
 import re
-import tempfile
-from io import BytesIO
 from typing import List, Optional
 
 # Imports de terceros
 import cv2
 import numpy as np
 from fastapi import HTTPException
-from PIL import Image
 from scipy.spatial.distance import cosine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -27,9 +24,9 @@ UMBRAL_SIMILITUD = 0.37  # Umbral para considerar rostros similares/duplicados
 
 # Configuración del modelo de reconocimiento facial
 # Modelos disponibles: VGG-Face, Facenet, Facenet512, OpenFace, DeepFace, DeepID, ArcFace, Dlib
-# RetinaFace es el mejor detector, pero también puedes usar: mtcnn, opencv, ssd, dlib
+# Detectores disponibles: retinaface, mtcnn, opencv, ssd, dlib, mediapipe, yolov8, yunet, fastmtcnn
 MODELO_FACIAL = "ArcFace"  # Mejor precisión (99.41% LFW)
-DETECTOR_BACKEND = "retinaface"  # Mejor detector de rostros
+DETECTOR_BACKEND = "opencv"  # opencv: rápido, no requiere descargas de Google Drive
 
 # MediaPipe removido - usar DeepFace para detección
 
@@ -111,41 +108,41 @@ def validarRostro(contenido: bytes) -> List[float]:
 
     Parámetros:
         contenido (bytes): Contenido de la imagen en bytes (por ejemplo, de un archivo subido).
-@@ -40,27 +127,33 @@ def validarRostro(contenido: bytes) -> List[float]:
+
+    Retorna:
+        List[float]: Embedding facial como lista de números flotantes.
+
+    Excepciones:
+        HTTPException 400: Si no se envió contenido, no hay rostros detectados o hay múltiples rostros.
         HTTPException 500: Si ocurre cualquier otro error al procesar la imagen.
     """
     if not contenido:
         raise HTTPException(status_code=400, detail="Sin imagen")
 
-    # Create a temporary file for DeepFace
-    # DeepFace works best with file paths across all versions
-    temp_file = None
     try:
-        img = Image.open(BytesIO(contenido)).convert("RGB")
+        # Convertir bytes a numpy array directamente
+        nparr = np.frombuffer(contenido, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         
-        # Save to temporary file
-        temp_file = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
-        img.save(temp_file.name, format="JPEG")
-        temp_path = temp_file.name
-        temp_file.close()
+        if img is None:
+            raise HTTPException(status_code=400, detail="Imagen invalida")
         
         logger.info(
-            "🔍 DeepFace.represent inicio | modelo=%s detector=%s size=%s temp_file=%s",
+            "🔍 DeepFace.represent inicio | modelo=%s detector=%s shape=%s",
             MODELO_FACIAL,
             DETECTOR_BACKEND,
-            img.size,
-            temp_path
+            img.shape
         )
         print(
             f"[DeepFace] Iniciando represent | modelo={MODELO_FACIAL} "
-            f"detector={DETECTOR_BACKEND} size={img.size} temp_file={temp_path}"
+            f"detector={DETECTOR_BACKEND} shape={img.shape}"
         )
         
         DeepFace = _get_deepface()
         
-        # DeepFace 0.0.96+ returns a list of dicts with 'embedding' key
+        # Pasar numpy array directamente (sin archivos temporales)
         resultado = DeepFace.represent(
-            img_path=temp_path,
+            img_path=img,
             model_name=MODELO_FACIAL,
             detector_backend=DETECTOR_BACKEND,
             enforce_detection=True  # Fuerza la detección de rostro
@@ -211,16 +208,6 @@ def validarRostro(contenido: bytes) -> List[float]:
         logger.error("❌ Error en DeepFace.represent | tipo=%s detalle=%s", error_type, error_msg)
         print(f"[DeepFace] Error ({error_type}): {error_msg}")
         raise HTTPException(status_code=500, detail="Error procesar imagen")
-    
-    finally:
-        # Clean up temporary file
-        if temp_file is not None:
-            try:
-                if os.path.exists(temp_path):
-                    os.unlink(temp_path)
-                    logger.debug("🗑️ Archivo temporal eliminado: %s", temp_path)
-            except Exception as cleanup_error:
-                logger.warning("⚠️ No se pudo eliminar archivo temporal %s: %s", temp_path, cleanup_error)
 
 
 
