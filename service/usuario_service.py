@@ -145,7 +145,7 @@ def validarRostro(contenido: bytes) -> List[float]:
             img_path=img,
             model_name=MODELO_FACIAL,
             detector_backend=DETECTOR_BACKEND,
-            enforce_detection=True  # Fuerza la detección de rostro
+            enforce_detection=False  # Fuerza la detección de rostro
         )
 
         if resultado is None:
