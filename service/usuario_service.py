@@ -20,7 +20,7 @@ from service.storage_service import (
 )
 
 # Constantes
-UMBRAL_SIMILITUD = 0.37  # Umbral para considerar rostros similares/duplicados
+UMBRAL_SIMILITUD = 0.35  # Umbral para considerar rostros similares/duplicados
 
 # Configuración del modelo de reconocimiento facial
 # Modelos disponibles: VGG-Face, Facenet, Facenet512, OpenFace, DeepFace, DeepID, ArcFace, Dlib
