@@ -449,7 +449,7 @@ async def comparar_cara(
         token = generar_token()
         return Response(
             status_code=200,
-            content=json.dumps({"token": f"Hola {nombre_usuario}, token: {token}"}),
+            content=json.dumps({"token": token, "mensaje": f"Hola {nombre_usuario}"}),
             media_type="application/json"
         )
     else:
