@@ -26,7 +26,7 @@ UMBRAL_SIMILITUD = 0.37  # Umbral para considerar rostros similares/duplicados
 # Modelos disponibles: VGG-Face, Facenet, Facenet512, OpenFace, DeepFace, DeepID, ArcFace, Dlib
 # Detectores disponibles: retinaface, mtcnn, opencv, ssd, dlib, mediapipe, yolov8, yunet, fastmtcnn
 MODELO_FACIAL = "Facenet512"  # Mejor precisión (99.41% LFW)
-DETECTOR_BACKEND = "opencv"  # opencv: rápido, no requiere descargas de Google Drive
+DETECTOR_BACKEND = "opencv"  # Detector rápido y ligero
 
 # MediaPipe removido - usar DeepFace para detección
 
@@ -45,6 +45,56 @@ def _get_deepface():
         from deepface import DeepFace as DeepFaceModule
         _deepface_module = DeepFaceModule
     return _deepface_module
+
+
+def precargar_modelo_facial():
+    """
+    Pre-carga el modelo de reconocimiento facial al iniciar el servidor.
+    Esto fuerza la descarga del modelo si no está disponible localmente.
+    """
+    try:
+        logger.info("🔄 Pre-cargando modelo facial: %s", MODELO_FACIAL)
+        print(f"[DeepFace] Pre-cargando modelo: {MODELO_FACIAL}")
+        
+        DeepFace = _get_deepface()
+        
+        # Crear una imagen dummy válida (100x100 píxeles) para forzar la carga del modelo
+        # Esto descargará el modelo si no existe, pero no procesará una imagen real
+        # Usamos una imagen más grande para que sea válida para DeepFace
+        img_dummy = np.zeros((100, 100, 3), dtype=np.uint8)
+        
+        # Intentar cargar el modelo haciendo una llamada mínima
+        # Si el modelo no está descargado, DeepFace lo descargará automáticamente
+        # Usamos enforce_detection=False para que no falle si no hay rostro
+        DeepFace.represent(
+            img_path=img_dummy,
+            model_name=MODELO_FACIAL,
+            detector_backend=DETECTOR_BACKEND,
+            enforce_detection=False
+        )
+        
+        logger.info("✅ Modelo facial pre-cargado exitosamente: %s", MODELO_FACIAL)
+        print(f"[DeepFace] ✅ Modelo {MODELO_FACIAL} pre-cargado exitosamente")
+        
+    except Exception as e:
+        # Si falla, intentar con build_model si está disponible
+        try:
+            logger.warning("⚠️ Fallo con represent, intentando build_model: %s", str(e))
+            DeepFace = _get_deepface()
+            # Algunas versiones de DeepFace tienen build_model
+            if hasattr(DeepFace, 'build_model'):
+                DeepFace.build_model(MODELO_FACIAL)
+                logger.info("✅ Modelo facial pre-cargado con build_model: %s", MODELO_FACIAL)
+                print(f"[DeepFace] ✅ Modelo {MODELO_FACIAL} pre-cargado con build_model")
+            else:
+                # Si no hay build_model, al menos importamos DeepFace para que esté listo
+                logger.info("ℹ️ DeepFace importado, modelo se descargará en primera uso")
+                print(f"[DeepFace] ℹ️ DeepFace importado, modelo se descargará en primera uso")
+        except Exception as e2:
+            logger.error("❌ Error al pre-cargar modelo facial: %s", str(e2))
+            print(f"[DeepFace] ❌ Error al pre-cargar modelo: {str(e2)}")
+            # No lanzamos excepción para que el servidor pueda arrancar igual
+            # El modelo se descargará cuando se use por primera vez
 
 
 def validarRostroRapido(contenido: bytes) -> bool:

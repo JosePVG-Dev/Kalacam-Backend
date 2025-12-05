@@ -24,7 +24,7 @@ from repository.usuario_repository import (
     obtener_usuarios
 )
 import service.usuario_service as face_service
-from service.usuario_service import validarRostroDuplicado, validarRostroRapido
+from service.usuario_service import precargar_modelo_facial, validarRostroDuplicado, validarRostroRapido
 from service.storage_service import (
     eliminar_imagen,
     obtener_extension_desde_content_type,
@@ -42,6 +42,8 @@ async def lifespan(app: FastAPI):
     Inicializa recursos al arrancar la aplicación y libera si fuera necesario.
     """
     Base.metadata.create_all(bind=engine)
+    # Pre-cargar el modelo de reconocimiento facial al iniciar
+    precargar_modelo_facial()
     yield
 
 app = FastAPI(

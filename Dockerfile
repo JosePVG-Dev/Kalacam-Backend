@@ -34,19 +34,7 @@ COPY --from=builder /root/.local /root/.local
 # Copiar código de la aplicación
 COPY . /app
 
-# Crear directorio para modelos en el volumen y crear symlink
-# DeepFace busca modelos en ~/.deepface (hardcodeado en código fuente)
-# Creamos un symlink para que apunte a nuestro volumen persistente
-RUN mkdir -p /data/models/deepface/.deepface/weights && \
-    ln -sf /data/models/deepface/.deepface /root/.deepface
 
-# PATCH: Modificar DeepFace para usar nuestra URL personalizada
-# El link original de DeepFace está caído, usamos nuestro backup
-RUN if [ -f /root/.local/lib/python3.11/site-packages/deepface/basemodels/ArcFace.py ]; then \
-    sed -i 's|https://drive.google.com/uc?id=1LVB3CdVejpmGHM28BpqqkbZP5hDEcdZY|https://drive.google.com/uc?id=1mjLC2mBJz71SDWnTcYTbrqE27RtOmMTk|g' \
-    /root/.local/lib/python3.11/site-packages/deepface/basemodels/ArcFace.py; \
-    echo "✅ DeepFace ArcFace URL patched"; \
-    fi
 
 # Asegurar que el PATH incluya las dependencias instaladas
 ENV PATH=/root/.local/bin:$PATH
