@@ -1,5 +1,4 @@
 # Imports estándar
-import logging
 import os
 import re
 from typing import List, Optional
@@ -30,9 +29,6 @@ DETECTOR_BACKEND = "opencv"  # Detector rápido y ligero
 
 # MediaPipe removido - usar DeepFace para detección
 
-# Logger del módulo
-logger = logging.getLogger(__name__)
-
 _deepface_module = None
 
 
@@ -53,9 +49,6 @@ def precargar_modelo_facial():
     Esto fuerza la descarga del modelo si no está disponible localmente.
     """
     try:
-        logger.info("🔄 Pre-cargando modelo facial: %s", MODELO_FACIAL)
-        print(f"[DeepFace] Pre-cargando modelo: {MODELO_FACIAL}")
-        
         DeepFace = _get_deepface()
         
         # Crear una imagen dummy válida (100x100 píxeles) para forzar la carga del modelo
@@ -73,28 +66,17 @@ def precargar_modelo_facial():
             enforce_detection=False
         )
         
-        logger.info("✅ Modelo facial pre-cargado exitosamente: %s", MODELO_FACIAL)
-        print(f"[DeepFace] ✅ Modelo {MODELO_FACIAL} pre-cargado exitosamente")
-        
     except Exception as e:
         # Si falla, intentar con build_model si está disponible
         try:
-            logger.warning("⚠️ Fallo con represent, intentando build_model: %s", str(e))
             DeepFace = _get_deepface()
             # Algunas versiones de DeepFace tienen build_model
             if hasattr(DeepFace, 'build_model'):
                 DeepFace.build_model(MODELO_FACIAL)
-                logger.info("✅ Modelo facial pre-cargado con build_model: %s", MODELO_FACIAL)
-                print(f"[DeepFace] ✅ Modelo {MODELO_FACIAL} pre-cargado con build_model")
-            else:
-                # Si no hay build_model, al menos importamos DeepFace para que esté listo
-                logger.info("ℹ️ DeepFace importado, modelo se descargará en primera uso")
-                print(f"[DeepFace] ℹ️ DeepFace importado, modelo se descargará en primera uso")
         except Exception as e2:
-            logger.error("❌ Error al pre-cargar modelo facial: %s", str(e2))
-            print(f"[DeepFace] ❌ Error al pre-cargar modelo: {str(e2)}")
             # No lanzamos excepción para que el servidor pueda arrancar igual
             # El modelo se descargará cuando se use por primera vez
+            pass
 
 
 def validarRostroRapido(contenido: bytes) -> bool:
@@ -145,118 +127,57 @@ def validarRostroRapido(contenido: bytes) -> bool:
         # Re-lanzar excepciones HTTP
         raise
     except Exception as e:
-        logger.error("Error en validarRostroRapido: %s", str(e))
         raise HTTPException(status_code=400, detail="Error procesar imagen")
 
 
 def validarRostro(contenido: bytes) -> List[float]:
     """
     Valida una imagen y genera su embedding facial utilizando DeepFace.
-    
-    Modelo configurado: ArcFace (máxima precisión 99.41%)
-    Detector: RetinaFace (mejor precisión en detección de rostros)
 
     Parámetros:
-        contenido (bytes): Contenido de la imagen en bytes (por ejemplo, de un archivo subido).
+        contenido (bytes): Contenido de la imagen en bytes.
 
     Retorna:
         List[float]: Embedding facial como lista de números flotantes.
 
     Excepciones:
-        HTTPException 400: Si no se envió contenido, no hay rostros detectados o hay múltiples rostros.
-        HTTPException 500: Si ocurre cualquier otro error al procesar la imagen.
+        HTTPException 400: Si no se envió contenido, imagen inválida o sin rostro detectado.
+        HTTPException 500: Si ocurre un error al procesar la imagen.
     """
     if not contenido:
         raise HTTPException(status_code=400, detail="Sin imagen")
 
     try:
-        # Convertir bytes a numpy array directamente
         nparr = np.frombuffer(contenido, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         
         if img is None:
             raise HTTPException(status_code=400, detail="Imagen invalida")
         
-        logger.info(
-            "🔍 DeepFace.represent inicio | modelo=%s detector=%s shape=%s",
-            MODELO_FACIAL,
-            DETECTOR_BACKEND,
-            img.shape
-        )
-        print(
-            f"[DeepFace] Iniciando represent | modelo={MODELO_FACIAL} "
-            f"detector={DETECTOR_BACKEND} shape={img.shape}"
-        )
-        
         DeepFace = _get_deepface()
-        
-        # Pasar numpy array directamente (sin archivos temporales)
         resultado = DeepFace.represent(
             img_path=img,
             model_name=MODELO_FACIAL,
             detector_backend=DETECTOR_BACKEND,
-            enforce_detection=False  # Fuerza la detección de rostro
+            enforce_detection=True
         )
 
-        if resultado is None:
-            raise HTTPException(status_code=400, detail="Sin rostro")
-
-        # Normalize DeepFace output (handles both old and new versions)
-        if isinstance(resultado, list):
-            # New versions (0.0.96+) return list of dicts
-            if len(resultado) > 0 and isinstance(resultado[0], dict) and "embedding" in resultado[0]:
-                resultados = resultado
-            # Old versions (0.0.53) return just the embedding list
-            elif len(resultado) > 0 and isinstance(resultado[0], (int, float)):
-                embedding = resultado
-                logger.info("🔢 Embedding generado (old format) | dimension=%d | primeros_valores=%s...", len(embedding), embedding[:5])
-                print(f"[DeepFace] Embedding generado (old format) dimension={len(embedding)} primeros_valores={embedding[:5]}")
-                return embedding
-            else:
-                raise HTTPException(status_code=400, detail="Sin rostro")
-        elif isinstance(resultado, dict) and "embedding" in resultado:
-            resultados = [resultado]
-        else:
-            logger.error("Respuesta inesperada de DeepFace: %s", type(resultado))
+        # Normalizar resultado: DeepFace devuelve lista de dicts o un dict
+        if isinstance(resultado, dict):
+            resultado = [resultado]
+        
+        if not resultado or not isinstance(resultado[0], dict) or "embedding" not in resultado[0]:
             raise HTTPException(status_code=500, detail="Error inesperado")
 
-        rostros_detectados = len(resultados)
-        logger.info("✅ DeepFace.represent completado | rostros_detectados=%s", rostros_detectados)
-        print(f"[DeepFace] Represent completado | rostros_detectados={rostros_detectados}")
-
-        if rostros_detectados == 0 or "embedding" not in resultados[0]:
-            raise HTTPException(status_code=400, detail="Sin rostro")
-
-        embedding = resultados[0]["embedding"]
-
-        if len(embedding) == 0:
+        embedding = resultado[0]["embedding"]
+        if not embedding:
             raise HTTPException(status_code=400, detail="Rostro invalido")
-        
-        logger.info("🔢 Embedding generado | dimension=%d | primeros_valores=%s...", len(embedding), embedding[:5])
-        print(f"[DeepFace] Embedding generado dimension={len(embedding)} primeros_valores={embedding[:5]}")
 
         return embedding
 
-    except ValueError as e:
-        error_msg = str(e)
-        logger.warning("⚠️ Sin rostro detectado: %s", error_msg)
-        print(f"[DeepFace] Sin rostro detectado: {error_msg}")
-        raise HTTPException(status_code=400, detail="Rostro no detectado")
-    
     except HTTPException:
         raise
-    
-    except ImportError as e:
-        error_msg = str(e)
-        logger.error("❌ Error de importación en validarRostro: %s", error_msg)
-        print(f"Error de importación en validarRostro: {error_msg}")
-        raise HTTPException(status_code=500, detail="Error de importación")
-    
-    except Exception as e:
-        error_msg = str(e)
-        error_type = type(e).__name__
-        logger.error("❌ Error en DeepFace.represent | tipo=%s detalle=%s", error_type, error_msg)
-        print(f"[DeepFace] Error ({error_type}): {error_msg}")
+    except Exception:
         raise HTTPException(status_code=500, detail="Error procesar imagen")
 
 
@@ -280,8 +201,6 @@ def validarRostroDuplicado(db: Session, embedding: List[float], excluir_usuario_
     usuarios = obtener_usuarios(db)
     
     # Comparar con cada usuario existente
-    logger.info("🔍 Comparando embedding con %d usuarios registrados", len(usuarios))
-    print(f"[DeepFace] Comparando contra {len(usuarios)} usuarios")
     for usuario in usuarios:
         # Excluir el usuario que se está actualizando
         if excluir_usuario_id and usuario.id == excluir_usuario_id:
@@ -298,8 +217,6 @@ def validarRostroDuplicado(db: Session, embedding: List[float], excluir_usuario_
         
         # Si la distancia es menor al umbral, son rostros similares (duplicado)
         if distancia < UMBRAL_SIMILITUD:
-            logger.warning("⚠️ Rostro duplicado detectado con usuario_id=%s distancia=%.4f", usuario.id, distancia)
-            print(f"[DeepFace] Rostro duplicado con usuario_id={usuario.id} distancia={distancia:.4f}")
             raise HTTPException(status_code=409, detail="Rostro duplicado")
 
 
@@ -387,8 +304,6 @@ def compararRostro(db: Session, contenido: bytes) -> Optional[str]:
     Excepciones:
         HTTPException 404: Si no hay usuarios registrados.
     """
-    logger.info("📸 Iniciando comparación de rostro")
-    print("[DeepFace] Iniciando comparación completa")
     embedding_consulta = np.array(validarRostro(contenido))
     usuarios = obtener_usuarios(db)
     if not usuarios:
@@ -407,14 +322,6 @@ def compararRostro(db: Session, contenido: bytes) -> Optional[str]:
             usuario_reconocido = usuario
 
     if menor_distancia < UMBRAL_SIMILITUD and usuario_reconocido:
-        logger.info(
-            "✅ Rostro reconocido | usuario_id=%s distancia=%.4f",
-            usuario_reconocido.id,
-            menor_distancia
-        )
-        print(f"[DeepFace] Rostro reconocido usuario_id={usuario_reconocido.id} distancia={menor_distancia:.4f}")
         return usuario_reconocido.nombre
     
-    logger.info("ℹ️ Rostro no reconocido | menor_distancia=%.4f", menor_distancia)
-    print(f"[DeepFace] Rostro NO reconocido | menor_distancia={menor_distancia:.4f}")
     return None
