@@ -376,51 +376,8 @@ def servir_imagen_usuario(nombre_archivo: str):
     
     return FileResponse(ruta_completa, media_type=media_type)
 
-# -------------------- VALIDAR ROSTRO RÁPIDO (PÚBLICO - PRUEBA) --------------------
-@app.post("/ws/validarRostro")  
-async def validar_rostro_rapido_endpoint(
-    imagen: UploadFile = File(...)
-):
-    """
-    Valida rápidamente si hay un rostro en la imagen.
-    
-    Args:
-        imagen: Imagen del rostro a validar (JPEG o PNG).
-    
-    Returns:
-        dict: Resultado de la validación con indicador si hay rostro detectado.
-    
-    Raises:
-        HTTPException: Si la imagen es inválida o hay error al procesarla.
-    """
-    if imagen.content_type not in ["image/jpeg", "image/png"]:
-        raise HTTPException(status_code=400, detail="Archivo invalido. Solo JPEG o PNG")
 
-    contenido = await imagen.read()
-    
-    try:
-        rostro_detectado = validarRostroRapido(contenido)
-        
-        if rostro_detectado:
-            return {
-                "ok": True,
-                "mensaje": "Rostro detectado correctamente",
-                "rostro_detectado": True
-            }
-        else:
-            return {
-                "ok": False,
-                "mensaje": "No se detectó ningún rostro en la imagen",
-                "rostro_detectado": False
-            }
-    
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error al procesar imagen: {str(e)}")
-
-
-# -------------------- COMPARAR CARA (PÚBLICO) --------------------
+# -------------------- COMPARAR CARA () --------------------
 @app.post("/compararCara")
 async def comparar_cara(
     imagen: UploadFile = File(...),
@@ -515,44 +472,6 @@ def validar_token_endpoint(request: TokenRequest):
         raise HTTPException(status_code=401, detail="Token invalido")
 
 
-# -------------------- WEBSOCKET PRUEBA --------------------
-@app.websocket("/ws/prueba")
-async def websocket_prueba(websocket: WebSocket):
-    """
-    Endpoint WebSocket de prueba bidireccional.
-    """
-    await websocket.accept()
-    print("Cliente conectado al WebSocket de prueba")
-    
-    await websocket.send_text("¡Conectado! Puedes enviarme mensajes y recibirás respuestas. También recibirás mensajes automáticos cada 5 segundos.")
-    
-    contador_automatico = 0
-    contador_mensajes = 0
-    
-    try:
-        while True:
-            try:
-                mensaje_cliente = await asyncio.wait_for(
-                    websocket.receive_text(),
-                    timeout=5.0
-                )
-                
-                contador_mensajes += 1
-                print(f"Mensaje recibido del cliente: {mensaje_cliente}")
-                
-                respuesta = f"Servidor recibió tu mensaje #{contador_mensajes}: '{mensaje_cliente}'. Respuesta automática del servidor."
-                await websocket.send_text(respuesta)
-                
-            except asyncio.TimeoutError:
-                contador_automatico += 1
-                mensaje_automatico = f"Mensaje automático #{contador_automatico} - Hora: {asyncio.get_event_loop().time():.2f}"
-                await websocket.send_text(mensaje_automatico)
-                print(f"Mensaje automático enviado: {mensaje_automatico}")
-            
-    except WebSocketDisconnect:
-        print("Cliente desconectado del WebSocket de prueba")
-    except Exception as e:
-        print(f"Error en WebSocket: {e}")
 
 
 @app.websocket("/ws/validarRostro")
